@@ -1,6 +1,6 @@
 # ADR-20261109: Page tree
 
-Status: Proposed
+Status: Accepted
 
 Extends [Pages (mini wiki)](ADR-20261109-pages.md).
 
