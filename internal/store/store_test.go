@@ -442,7 +442,9 @@ func TestPlacesLegacyImport(t *testing.T) {
 INSERT INTO places VALUES ('p1', '{"name":"Basel","latitude":47.5596,"longitude":7.5886}', 1, `+ts0+`);
 INSERT INTO place_lists VALUES ('l1', '{"name":"Rhein","date_from":"2024-05-01","date_to":"","source_file":"trip.json"}', 1, `+ts0+`);
 INSERT INTO place_list_places VALUES ('j1', '{"place_list_id":"l1","place_id":"p1"}', 1, `+ts0+`);
-INSERT INTO place_visits VALUES ('v1', '{"latitude":47.5,"longitude":7.6,"timestamp":"2024-05-03T10:00:00Z","source_file":"trip.json"}', 1, `+ts0+`);`)
+INSERT INTO place_visits VALUES ('v1', '{"latitude":47.5,"longitude":7.6,"timestamp":"2024-05-03T10:00:00Z","source_file":"trip.json"}', 1, `+ts0+`);
+INSERT INTO place_visits VALUES ('v2', '{"latitude":46.2,"longitude":7.8,"timestamp":"line:00000001","source_file":"weg.kmz"}', 1, `+ts0+`);
+INSERT INTO place_visits VALUES ('v3', '{"latitude":46.1,"longitude":7.8,"timestamp":"line:00000000","source_file":"weg.kmz"}', 1, `+ts0+`);`)
 	_ = l.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -463,6 +465,13 @@ INSERT INTO place_visits VALUES ('v1', '{"latitude":47.5,"longitude":7.6,"timest
 	if len(vs) != 1 || vs[0].Timestamp.Hour() != 10 {
 		t.Fatalf("visits %+v", vs)
 	}
+	line, _ := s.Places().VisitsBySource(ctx, admin.ID, "weg.kmz")
+	if len(line) != 2 || line[0].ID != "v3" || line[1].Seq != 1 || !line[1].Timestamp.IsZero() {
+		t.Fatalf("untimed track %+v", line)
+	}
+	if days, _ := s.Places().VisitDays(ctx, admin.ID); len(days) != 1 || days[0] != "2024-05-03" {
+		t.Errorf("visit days %v", days)
+	}
 	day, _ := time.Parse(time.DateOnly, "2024-05-03")
 	if on, _ := s.Places().VisitsOn(ctx, admin.ID, day, day.AddDate(0, 0, 1)); len(on) != 1 {
 		t.Errorf("visits on day: %d", len(on))
@@ -471,5 +480,58 @@ INSERT INTO place_visits VALUES ('v1', '{"latitude":47.5,"longitude":7.6,"timest
 	n, err := s.Places().InsertVisits(ctx, []places.Visit{{ID: "x", OwnerID: admin.ID, Latitude: 47.5, Longitude: 7.6, Timestamp: vs[0].Timestamp, SourceFile: "trip.json"}})
 	if err != nil || n != 0 {
 		t.Errorf("duplicate visit: %d %v", n, err)
+	}
+	// An existing id at another time is an error, not skipped.
+	if _, err := s.Places().InsertVisits(ctx, []places.Visit{{ID: "x", OwnerID: admin.ID, Latitude: 47.5, Longitude: 7.6, Timestamp: vs[0].Timestamp.Add(time.Hour), SourceFile: "trip.json"},
+		{ID: "x", OwnerID: admin.ID, Latitude: 47.5, Longitude: 7.6, Timestamp: vs[0].Timestamp.Add(2 * time.Hour), SourceFile: "trip.json"}}); err == nil {
+		t.Error("duplicate id accepted")
+	}
+	// A point without a time only comes from the legacy import.
+	if _, err := s.Places().InsertVisits(ctx, []places.Visit{{ID: "y", OwnerID: admin.ID, Latitude: 47.5, Longitude: 7.6, SourceFile: "weg.kmz"}}); err == nil {
+		t.Error("untimed visit accepted")
+	}
+}
+
+func TestPlacesLegacyRejectsUnexpected(t *testing.T) {
+	cases := map[string]string{
+		"short line": `{"latitude":46.2,"longitude":7.8,"timestamp":"line:12","source_file":"weg.kmz"}`,
+		"text time":  `{"latitude":46.2,"longitude":7.8,"timestamp":"gestern","source_file":"weg.kmz"}`,
+		"no time":    `{"latitude":46.2,"longitude":7.8,"source_file":"weg.kmz"}`,
+		"dup line":   `{"latitude":46.2,"longitude":7.8,"timestamp":"line:00000000","source_file":"a.kmz"}`,
+	}
+	for name, data := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			ctx := context.Background()
+			p := filepath.Join(dir, "almanach.db")
+			l, _ := db.Open(ctx, p)
+			_, _ = l.ExecContext(ctx, `CREATE TABLE place_visits (id TEXT PRIMARY KEY, data TEXT NOT NULL, schema_version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`)
+			stmt := `INSERT INTO place_visits VALUES ('v9', ?, 1, ` + ts0 + `)`
+			if name == "dup line" {
+				stmt += `, ('v8', ?, 1, ` + ts0 + `)`
+			}
+			args := []any{data}
+			if name == "dup line" {
+				args = append(args, data)
+			}
+			_, err := l.ExecContext(ctx, stmt, args...)
+			_ = l.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(dir, "allmend.db")
+			d, _ := db.Open(ctx, path)
+			defer func() { _ = d.Close() }()
+			_, err = db.Migrate(ctx, d, path, migrations.All(), db.Options{BackupDir: dir, LegacyDB: p, Env: db.MigrationEnv{AdminEmail: "admin@example.org"}})
+			if err == nil {
+				t.Fatal("want rejection")
+			}
+			if name != "dup line" && !strings.Contains(err.Error(), "v9") {
+				t.Fatalf("want rejection naming the row, got %v", err)
+			}
+			if v, _ := db.CurrentVersion(ctx, d); v != 0 {
+				t.Fatalf("partial migration: version %d", v)
+			}
+		})
 	}
 }

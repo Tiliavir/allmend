@@ -36,8 +36,9 @@ func finSeed(t *testing.T, e *env, admin *http.Client) map[string]string {
 	must(e.post(admin, "/finanzen/wertpapiere/"+etf.ID+"/transaktionen", url.Values{"date": {"2025-01-10"}, "type": {"buy"}, "quantity": {"10"}, "price": {"100"}, "fees": {"5"}}), "kauf")
 	must(e.post(admin, "/finanzen/wertpapiere/"+etf.ID+"/transaktionen", url.Values{"date": {"2025-06-10"}, "type": {"sell"}, "quantity": {"4"}, "price": {"120"}}), "verkauf")
 	must(e.post(admin, "/finanzen/wertpapiere/"+firma.ID+"/transaktionen", url.Values{"date": {"2025-03-01"}, "type": {"buy"}, "quantity": {"2,5"}, "price": {"40"}}), "kauf usd")
-	must(e.post(admin, "/finanzen/wertpapiere/"+etf.ID+"/dividenden", url.Values{"date": {"2025-09-01"}, "amount": {"12,30"}}), "dividende")
-	must(e.post(admin, "/finanzen/verlauf", url.Values{"year": {"2024"}, "income": {"90000"}, "cash": {"10000"}, "stocks": {"5000"}, "comment": {"**Gutes** Jahr"}}), "jahr")
+	must(e.post(admin, "/finanzen/wertpapiere/"+etf.ID+"/dividenden", url.Values{"date": {"2025-09-01"}, "amount": {"12,30"}, "currency": {"EUR"}}), "dividende")
+	must(e.post(admin, "/finanzen/verlauf", url.Values{"year": {"2023"}, "currency": {"CHF"}, "cash": {"8000"}}), "jahr chf")
+	must(e.post(admin, "/finanzen/verlauf", url.Values{"year": {"2024"}, "currency": {"EUR"}, "income": {"90000"}, "cash": {"10000"}, "stocks": {"5000"}, "comment": {"**Gutes** Jahr"}}), "jahr")
 	at := time.Now()
 	var ps []finanzen.Price
 	for d := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC); d.Before(time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC)); d = d.AddDate(0, 0, 3) {
@@ -105,6 +106,13 @@ func TestFinanzen(t *testing.T) {
 			t.Errorf("detail lacks %q", want)
 		}
 	}
+	// Years keep their currency; the chart needs a rate for mixed ones.
+	_, body = e.get(admin, "/finanzen/verlauf")
+	for _, want := range []string{"<td>CHF</td>", "Kein Wechselkurs CHF → EUR (betroffene Jahre"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("years lack %q", want)
+		}
+	}
 	_, body = e.get(admin, "/finanzen/wertpapiere/"+firma.ID)
 	if !strings.Contains(body, "6 / 7") || !strings.Contains(body, "manuell") {
 		t.Error("manual risk class not shown")
@@ -125,6 +133,8 @@ func TestFinanzen(t *testing.T) {
 		{"/finanzen/wertpapiere", url.Values{"name": {"X"}, "kind": {"etf"}, "currency": {"EUR"}, "w_sector": {"A = 70\nB = 40"}}},
 		{"/finanzen/wertpapiere", url.Values{"name": {"X"}, "kind": {"etf"}, "currency": {"EUR"}, "w_sector": {"nur Text"}}},
 		{"/finanzen/verlauf", url.Values{"year": {"2024"}}},
+		{"/finanzen/verlauf", url.Values{"year": {"2022"}, "currency": {"EURO"}}},
+		{"/finanzen/wertpapiere/" + etf.ID + "/dividenden", url.Values{"date": {"2025-09-02"}, "amount": {"1"}}},
 	}
 	for i, b := range bad {
 		if r := e.post(admin, b.path, b.form); r.StatusCode != http.StatusUnprocessableEntity {

@@ -31,12 +31,14 @@ type List struct {
 	PlaceCount        int
 }
 
-// Visit is one GPS point.
+// Visit is one GPS point. A point of a track drawn without times (old KMZ
+// lines) has no Timestamp (zero) but its position Seq in the track.
 type Visit struct {
 	ID, OwnerID         string
 	PlaceID             string
 	Latitude, Longitude float64
 	Timestamp           time.Time
+	Seq                 int // only without Timestamp
 	SourceFile          string
 }
 
@@ -50,7 +52,8 @@ type Repository interface {
 	VisitsBySource(ctx context.Context, owner, source string) ([]Visit, error)
 	VisitDays(ctx context.Context, owner string) ([]string, error) // YYYY-MM-DD (UTC), ascending
 	VisitsOn(ctx context.Context, owner string, from, to time.Time) ([]Visit, error)
-	// InsertVisits adds visits, skipping ones that exist (same source and time); returns the number added.
+	// InsertVisits adds timed visits, skipping ones that exist (same source and time); returns the number added.
+	// A visit without a time is an error (untimed points come only from the legacy import).
 	InsertVisits(ctx context.Context, vs []Visit) (int, error)
 }
 

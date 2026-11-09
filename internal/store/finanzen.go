@@ -103,14 +103,14 @@ func (r *Finanzen) DeleteAsset(ctx context.Context, owner, id string) error {
 
 // ── securities ────────────────────────────────────────
 
-const secCols = `id, owner_id, name, isin, ticker, kind, currency, symbol, archived, archived_at, risk_override, version, created_at, updated_at`
+const secCols = `id, owner_id, name, isin, ticker, kind, currency, symbol, archived, archived_at, risk_override, notes, version, created_at, updated_at`
 
 func scanSecurity(row scanner) (finanzen.Security, error) {
 	var s finanzen.Security
 	var archived int
 	var c, u string
 	if err := row.Scan(&s.ID, &s.OwnerID, &s.Name, &s.ISIN, &s.Ticker, &s.Kind, &s.Currency, &s.Symbol, &archived, &s.ArchivedAt,
-		&s.RiskOverride, &s.Version, &c, &u); err != nil {
+		&s.RiskOverride, &s.Notes, &s.Version, &c, &u); err != nil {
 		return s, err
 	}
 	s.Archived = archived == 1
@@ -205,9 +205,9 @@ func putWeights(ctx context.Context, tx *sql.Tx, key string, ws []finanzen.Weigh
 // InsertSecurity stores a new security with its weights.
 func (r *Finanzen) InsertSecurity(ctx context.Context, s finanzen.Security) error {
 	return r.inTx(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO fin_securities (`+secCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		if _, err := tx.ExecContext(ctx, `INSERT INTO fin_securities (`+secCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			s.ID, s.OwnerID, s.Name, s.ISIN, s.Ticker, s.Kind, s.Currency, s.Symbol, b2i(s.Archived), s.ArchivedAt, s.RiskOverride,
-			s.Version, fmtTime(s.CreatedAt), fmtTime(s.UpdatedAt)); err != nil {
+			s.Notes, s.Version, fmtTime(s.CreatedAt), fmtTime(s.UpdatedAt)); err != nil {
 			return err
 		}
 		return putWeights(ctx, tx, s.ID, s.Weights)
@@ -218,8 +218,8 @@ func (r *Finanzen) InsertSecurity(ctx context.Context, s finanzen.Security) erro
 func (r *Finanzen) UpdateSecurity(ctx context.Context, s finanzen.Security, want int) error {
 	return r.inTx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `UPDATE fin_securities SET name = ?, isin = ?, ticker = ?, kind = ?, currency = ?, symbol = ?,
-	archived = ?, archived_at = ?, risk_override = ?, version = ?, updated_at = ? WHERE owner_id = ? AND id = ? AND version = ?`,
-			s.Name, s.ISIN, s.Ticker, s.Kind, s.Currency, s.Symbol, b2i(s.Archived), s.ArchivedAt, s.RiskOverride, s.Version,
+	archived = ?, archived_at = ?, risk_override = ?, notes = ?, version = ?, updated_at = ? WHERE owner_id = ? AND id = ? AND version = ?`,
+			s.Name, s.ISIN, s.Ticker, s.Kind, s.Currency, s.Symbol, b2i(s.Archived), s.ArchivedAt, s.RiskOverride, s.Notes, s.Version,
 			fmtTime(s.UpdatedAt), s.OwnerID, s.ID, want)
 		if err := finAffected(res, err, finanzen.ErrConflict); err != nil {
 			return err
@@ -310,12 +310,12 @@ func (r *Finanzen) DeleteTransaction(ctx context.Context, owner, id string) erro
 
 // ── dividends ─────────────────────────────────────────
 
-const divCols = `id, owner_id, security_id, date, amount_cents, version, created_at, updated_at`
+const divCols = `id, owner_id, security_id, date, currency, amount_cents, version, created_at, updated_at`
 
 func scanDiv(row scanner) (finanzen.Dividend, error) {
 	var d finanzen.Dividend
 	var c, u string
-	if err := row.Scan(&d.ID, &d.OwnerID, &d.SecurityID, &d.Date, &d.AmountCents, &d.Version, &c, &u); err != nil {
+	if err := row.Scan(&d.ID, &d.OwnerID, &d.SecurityID, &d.Date, &d.Currency, &d.AmountCents, &d.Version, &c, &u); err != nil {
 		return d, err
 	}
 	return d, times(&d.CreatedAt, &d.UpdatedAt, c, u)
@@ -347,15 +347,15 @@ func (r *Finanzen) Dividend(ctx context.Context, owner, id string) (finanzen.Div
 
 // InsertDividend stores a new dividend.
 func (r *Finanzen) InsertDividend(ctx context.Context, d finanzen.Dividend) error {
-	_, err := r.s.db.ExecContext(ctx, `INSERT INTO fin_dividends (`+divCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		d.ID, d.OwnerID, d.SecurityID, d.Date, d.AmountCents, d.Version, fmtTime(d.CreatedAt), fmtTime(d.UpdatedAt))
+	_, err := r.s.db.ExecContext(ctx, `INSERT INTO fin_dividends (`+divCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		d.ID, d.OwnerID, d.SecurityID, d.Date, d.Currency, d.AmountCents, d.Version, fmtTime(d.CreatedAt), fmtTime(d.UpdatedAt))
 	return err
 }
 
 // UpdateDividend replaces a dividend if it still has version want.
 func (r *Finanzen) UpdateDividend(ctx context.Context, d finanzen.Dividend, want int) error {
-	res, err := r.s.db.ExecContext(ctx, `UPDATE fin_dividends SET date = ?, amount_cents = ?, version = ?, updated_at = ?
-WHERE owner_id = ? AND id = ? AND version = ?`, d.Date, d.AmountCents, d.Version, fmtTime(d.UpdatedAt), d.OwnerID, d.ID, want)
+	res, err := r.s.db.ExecContext(ctx, `UPDATE fin_dividends SET date = ?, currency = ?, amount_cents = ?, version = ?, updated_at = ?
+WHERE owner_id = ? AND id = ? AND version = ?`, d.Date, d.Currency, d.AmountCents, d.Version, fmtTime(d.UpdatedAt), d.OwnerID, d.ID, want)
 	return finAffected(res, err, finanzen.ErrConflict)
 }
 
@@ -367,13 +367,13 @@ func (r *Finanzen) DeleteDividend(ctx context.Context, owner, id string) error {
 
 // ── years ─────────────────────────────────────────────
 
-const finYearCols = `owner_id, year, income_cents, tax_cents, pension_cents, cash_cents, bauspar_cents, stocks_cents, funds_cents,
+const finYearCols = `owner_id, year, currency, income_cents, tax_cents, pension_cents, cash_cents, bauspar_cents, stocks_cents, funds_cents,
 	real_estate_cents, comment, version, updated_at`
 
 func scanYear(row scanner) (finanzen.Year, error) {
 	var y finanzen.Year
 	var u string
-	if err := row.Scan(&y.OwnerID, &y.Year, &y.IncomeCents, &y.TaxCents, &y.PensionCents, &y.CashCents, &y.BausparCents, &y.StocksCents,
+	if err := row.Scan(&y.OwnerID, &y.Year, &y.Currency, &y.IncomeCents, &y.TaxCents, &y.PensionCents, &y.CashCents, &y.BausparCents, &y.StocksCents,
 		&y.FundsCents, &y.RealEstateCents, &y.Comment, &y.Version, &u); err != nil {
 		return y, err
 	}
@@ -408,17 +408,17 @@ func (r *Finanzen) Year(ctx context.Context, owner string, year int) (finanzen.Y
 
 // InsertYear stores a new snapshot.
 func (r *Finanzen) InsertYear(ctx context.Context, y finanzen.Year) error {
-	_, err := r.s.db.ExecContext(ctx, `INSERT INTO fin_years (`+finYearCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		y.OwnerID, y.Year, y.IncomeCents, y.TaxCents, y.PensionCents, y.CashCents, y.BausparCents, y.StocksCents, y.FundsCents,
+	_, err := r.s.db.ExecContext(ctx, `INSERT INTO fin_years (`+finYearCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		y.OwnerID, y.Year, y.Currency, y.IncomeCents, y.TaxCents, y.PensionCents, y.CashCents, y.BausparCents, y.StocksCents, y.FundsCents,
 		y.RealEstateCents, y.Comment, y.Version, fmtTime(y.UpdatedAt))
 	return err
 }
 
 // UpdateYear replaces a snapshot if it still has version want.
 func (r *Finanzen) UpdateYear(ctx context.Context, y finanzen.Year, want int) error {
-	res, err := r.s.db.ExecContext(ctx, `UPDATE fin_years SET income_cents = ?, tax_cents = ?, pension_cents = ?, cash_cents = ?,
+	res, err := r.s.db.ExecContext(ctx, `UPDATE fin_years SET currency = ?, income_cents = ?, tax_cents = ?, pension_cents = ?, cash_cents = ?,
 	bauspar_cents = ?, stocks_cents = ?, funds_cents = ?, real_estate_cents = ?, comment = ?, version = ?, updated_at = ?
-WHERE owner_id = ? AND year = ? AND version = ?`, y.IncomeCents, y.TaxCents, y.PensionCents, y.CashCents, y.BausparCents, y.StocksCents,
+WHERE owner_id = ? AND year = ? AND version = ?`, y.Currency, y.IncomeCents, y.TaxCents, y.PensionCents, y.CashCents, y.BausparCents, y.StocksCents,
 		y.FundsCents, y.RealEstateCents, y.Comment, y.Version, fmtTime(y.UpdatedAt), y.OwnerID, y.Year, want)
 	return finAffected(res, err, finanzen.ErrConflict)
 }
@@ -540,7 +540,8 @@ GROUP BY symbol ORDER BY symbol`)
 
 // Currencies lists all currencies in use except base.
 func (r *Finanzen) Currencies(ctx context.Context, base string) ([]string, error) {
-	rows, err := r.s.db.QueryContext(ctx, `SELECT currency FROM fin_assets UNION SELECT currency FROM fin_securities ORDER BY 1`)
+	rows, err := r.s.db.QueryContext(ctx, `SELECT currency FROM fin_assets UNION SELECT currency FROM fin_securities
+UNION SELECT currency FROM fin_dividends UNION SELECT currency FROM fin_years ORDER BY 1`)
 	if err != nil {
 		return nil, err
 	}

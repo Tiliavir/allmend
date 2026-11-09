@@ -121,6 +121,7 @@ type Security struct {
 	Archived     bool
 	ArchivedAt   string // YYYY-MM-DD or ""
 	RiskOverride int    // 0 = derived from prices; 1–7 = manual SRRI class
+	Notes        string // Markdown, e.g. sources of the manual composition
 	Weights      []Weight
 	Version      int
 	CreatedAt    time.Time
@@ -148,20 +149,24 @@ type Transaction struct {
 	UpdatedAt               time.Time
 }
 
-// Dividend is a payout in the security's currency.
+// Dividend is a payout. Its currency is the one it was paid in, usually the
+// security's (a broker may pay in another, e.g. CHF for a USD stock).
 type Dividend struct {
 	ID, OwnerID, SecurityID string
 	Date                    string
+	Currency                string
 	AmountCents             int64
 	Version                 int
 	CreatedAt               time.Time
 	UpdatedAt               time.Time
 }
 
-// Year is the manually recorded yearly snapshot, in the base currency.
+// Year is the manually recorded yearly snapshot; all its amounts are in
+// Currency.
 type Year struct {
 	OwnerID         string
 	Year            int
+	Currency        string
 	IncomeCents     int64
 	TaxCents        int64
 	PensionCents    int64
@@ -343,6 +348,7 @@ func CheckSecurity(s Security) error {
 	p.add(len(s.Ticker) > 20, "Ticker ist zu lang")
 	p.add(s.Symbol != "" && !symbolRe.MatchString(s.Symbol), "Kurssymbol enthält unerlaubte Zeichen")
 	p.add(s.RiskOverride < 0 || s.RiskOverride > 7, "Risikoklasse muss 1–7 sein (leer = aus Kursen)")
+	p.add(len(s.Notes) > 20000, "Notizen sind zu lang")
 	p.add(!s.Archived && s.ArchivedAt != "", "Archivdatum ohne Archivierung")
 	p.add(s.ArchivedAt != "" && !ValidDate(s.ArchivedAt), "Archivdatum ist ungültig")
 	p = append(p, checkWeights(s.Weights)...)
@@ -395,6 +401,7 @@ func CheckTransaction(t Transaction) error {
 func CheckDividend(d Dividend) error {
 	var p Problems
 	p.add(!ValidDate(d.Date), "Datum fehlt oder ist ungültig")
+	p.add(!ValidCurrency(d.Currency), "Währung muss ein ISO-Code wie EUR sein")
 	p.add(d.AmountCents <= 0 || d.AmountCents > maxCents, "Betrag muss grösser als 0 sein")
 	return p.Err()
 }
@@ -403,6 +410,7 @@ func CheckDividend(d Dividend) error {
 func CheckYear(y Year) error {
 	var p Problems
 	p.add(y.Year < 1900 || y.Year > 2200, "Jahr ist ungültig")
+	p.add(!ValidCurrency(y.Currency), "Währung muss ein ISO-Code wie EUR sein")
 	p.add(badCents(y.IncomeCents, y.TaxCents, y.PensionCents, y.CashCents, y.BausparCents, y.StocksCents, y.FundsCents, y.RealEstateCents),
 		"Beträge müssen zwischen 0 und 100 Mrd. liegen")
 	p.add(len(y.Comment) > 20000, "Kommentar ist zu lang")

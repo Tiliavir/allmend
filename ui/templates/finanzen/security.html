@@ -3,6 +3,7 @@
 <div class="page-title"><h1>{{$d.Name}}</h1>
 <div class="actions"><a class="button secondary" href="/finanzen/wertpapiere/{{$d.ID}}/bearbeiten">Bearbeiten</a><a class="button secondary" href="/finanzen/wertpapiere/{{$d.ID}}/dividenden/neu">Dividende</a><a class="button secondary" href="/finanzen/wertpapiere/{{$d.ID}}/transaktionen/neu?typ=verkauf">Verkauf</a><a class="button" href="/finanzen/wertpapiere/{{$d.ID}}/transaktionen/neu">Kauf</a></div></div>
 {{template "finnav" "securities"}}
+{{if $d.Missing}}<div class="flash error" role="status"><ul>{{range $d.Missing}}<li>{{.}} (Dividenden in dieser Währung fehlen in den Summen)</li>{{end}}</ul></div>{{end}}
 <p class="muted">{{kindLabel $d.Kind}}{{if $d.ISIN}} · {{$d.ISIN}}{{end}}{{if $d.Ticker}} · {{$d.Ticker}}{{end}}{{if $d.Symbol}} · Kurse: {{$d.Symbol}}{{else}} · ohne Kurssymbol{{end}}{{if $d.Archived}} · <span class="badge">archiviert {{dateDE $d.ArchivedAt}}</span>{{end}}</p>
 <div class="stats">
 <div class="stat"><span class="label">Bestand</span><span class="value">{{qty $d.Held}}</span><span class="muted small">{{if $d.HasPrice}}Kurs {{money $d.PriceCents $c}} am {{dateDE $d.PriceDate}}{{else}}kein Kurs{{end}}</span></div>
@@ -33,6 +34,10 @@
 {{range $d.Dims}}{{$ws := index $d.Composition .ID}}{{if $ws}}<h3>{{.Label}}</h3>{{template "weights" $ws}}{{end}}{{end}}
 {{if not $d.Composition}}<p class="muted small">Keine Daten. Erfasse sie beim Bearbeiten oder warte auf Alpha Vantage.</p>{{end}}
 </section>
+{{if $d.Notes}}<section class="card" aria-labelledby="notes">
+<h2 id="notes">Notizen</h2>
+<div class="prose small">{{$d.Notes}}</div>
+</section>{{end}}
 </div>
 <section class="card" aria-labelledby="tx">
 <h2 id="tx">Transaktionen</h2>
@@ -46,7 +51,7 @@
 {{if $d.Dividends}}<div class="grid-3">
 <div class="table-wrap"><table>
 <thead><tr><th scope="col">Datum</th><th scope="col" class="num">Brutto</th><th scope="col" class="num">Netto</th><th scope="col" class="num">pro Stück</th></tr></thead>
-<tbody>{{range $d.Dividends}}<tr><td><a href="/finanzen/dividenden/{{.ID}}">{{dateDE .Date}}</a></td><td class="num">{{money .AmountCents $c}}</td><td class="num">{{money (afterTax .AmountCents) $c}}</td><td class="num">{{if .PerUnitCents}}{{money .PerUnitCents $c}}{{else}}–{{end}}</td></tr>
+<tbody>{{range $d.Dividends}}<tr><td><a href="/finanzen/dividenden/{{.ID}}">{{dateDE .Date}}</a></td><td class="num">{{money .AmountCents .Currency}}</td><td class="num">{{money (afterTax .AmountCents) .Currency}}</td><td class="num">{{if .PerUnitCents}}{{money .PerUnitCents .Currency}}{{else}}–{{end}}</td></tr>
 {{end}}</tbody></table></div>
 <div class="table-wrap"><table>
 <thead><tr><th scope="col">Jahr</th><th scope="col" class="num">Brutto</th><th scope="col" class="num">Netto</th></tr></thead>

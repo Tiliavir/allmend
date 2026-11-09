@@ -385,10 +385,13 @@ func TestPagesRender(t *testing.T) {
 	if _, err := e.st.DB().ExecContext(context.Background(), `INSERT INTO places VALUES ('p1', ?, 'Basel', 'Rheinknie', 47.5596, 7.5886, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z');
 INSERT INTO place_lists VALUES ('l1', ?, 'Rhein', '', '2024-05-01', '2024-05-04', 'trip.json', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z');
 INSERT INTO place_list_places VALUES ('l1', 'p1');
-INSERT INTO place_visits VALUES ('v1', ?, NULL, 47.5, 7.6, '2024-05-03T10:00:00.000Z', 'trip.json');`, aid, aid, aid); err != nil {
+INSERT INTO place_visits VALUES ('v1', ?, NULL, 47.5, 7.6, '2024-05-03T10:00:00.000Z', NULL, 'trip.json');
+INSERT INTO place_lists VALUES ('l2', ?, 'Weg', '', '', '', 'weg.kmz', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z');
+INSERT INTO place_visits VALUES ('v2', ?, NULL, 46.1, 7.8, NULL, 0, 'weg.kmz'), ('v3', ?, NULL, 46.2, 7.8, NULL, 1, 'weg.kmz');`, aid, aid, aid, aid, aid, aid); err != nil {
 		t.Fatal(err)
 	}
 	pages["orte-liste"] = pageCase{admin, "/orte/listen/l1", 200}
+	pages["orte-liste-ohne-zeit"] = pageCase{admin, "/orte/listen/l2", 200}
 	pages["orte-tag"] = pageCase{admin, "/orte/zeitachse?tag=2024-05-03", 200}
 	for name, path := range finSeed(t, e, admin) {
 		pages[name] = pageCase{admin, path, 200}

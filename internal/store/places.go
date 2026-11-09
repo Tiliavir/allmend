@@ -68,7 +68,7 @@ FROM places p JOIN place_list_places lp ON lp.place_id = p.id WHERE lp.list_id =
 	return l, ps, rows.Err()
 }
 
-const visitSelect = `SELECT id, owner_id, COALESCE(place_id, ''), latitude, longitude, at, source_file FROM place_visits WHERE `
+const visitSelect = `SELECT id, owner_id, COALESCE(place_id, ''), latitude, longitude, at, seq, source_file FROM place_visits WHERE `
 
 // visits runs visitSelect with a fixed WHERE clause; where is always a
 // constant from this file, values go through args.
@@ -82,24 +82,33 @@ func (r *Places) visits(ctx context.Context, where string, args ...any) ([]place
 	var out []places.Visit
 	for rows.Next() {
 		var v places.Visit
-		var at string
-		if err := rows.Scan(&v.ID, &v.OwnerID, &v.PlaceID, &v.Latitude, &v.Longitude, &at, &v.SourceFile); err != nil {
+		var at sql.NullString
+		var seq sql.NullInt64
+		if err := rows.Scan(&v.ID, &v.OwnerID, &v.PlaceID, &v.Latitude, &v.Longitude, &at, &seq, &v.SourceFile); err != nil {
 			return nil, err
 		}
-		if v.Timestamp, err = time.Parse(time.RFC3339Nano, at); err != nil {
-			return nil, fmt.Errorf("store.Places: bad visit time %q: %w", at, err)
+		switch {
+		case at.Valid && !seq.Valid:
+			if v.Timestamp, err = time.Parse(time.RFC3339Nano, at.String); err != nil {
+				return nil, fmt.Errorf("store.Places: bad visit time %q: %w", at.String, err)
+			}
+		case seq.Valid && !at.Valid:
+			v.Seq = int(seq.Int64)
+		default:
+			return nil, fmt.Errorf("store.Places: visit %s needs either a time or a track position", v.ID)
 		}
 		out = append(out, v)
 	}
 	return out, rows.Err()
 }
 
-// VisitsBySource returns the GPS track of an imported file, by time.
+// VisitsBySource returns the GPS track of an imported file, by time, then
+// by track position.
 func (r *Places) VisitsBySource(ctx context.Context, owner, source string) ([]places.Visit, error) {
-	return r.visits(ctx, `owner_id = ? AND source_file = ? ORDER BY julianday(at)`, owner, source)
+	return r.visits(ctx, `owner_id = ? AND source_file = ? ORDER BY julianday(at), seq`, owner, source)
 }
 
-// VisitsOn returns visits in [from, to), by time.
+// VisitsOn returns visits in [from, to), by time; points without time never match.
 func (r *Places) VisitsOn(ctx context.Context, owner string, from, to time.Time) ([]places.Visit, error) {
 	return r.visits(ctx, `owner_id = ? AND julianday(at) >= julianday(?) AND julianday(at) < julianday(?) ORDER BY julianday(at)`,
 		owner, from.UTC().Format(visitTime), to.UTC().Format(visitTime))
@@ -107,7 +116,7 @@ func (r *Places) VisitsOn(ctx context.Context, owner string, from, to time.Time)
 
 // VisitDays lists the UTC days with visits.
 func (r *Places) VisitDays(ctx context.Context, owner string) ([]string, error) {
-	rows, err := r.s.db.QueryContext(ctx, `SELECT DISTINCT date(at) FROM place_visits WHERE owner_id = ? ORDER BY 1`, owner)
+	rows, err := r.s.db.QueryContext(ctx, `SELECT DISTINCT date(at) FROM place_visits WHERE owner_id = ? AND at IS NOT NULL ORDER BY 1`, owner)
 	if err != nil {
 		return nil, fmt.Errorf("store.Places.VisitDays: %w", err)
 	}
@@ -123,8 +132,15 @@ func (r *Places) VisitDays(ctx context.Context, owner string) ([]string, error) 
 	return out, rows.Err()
 }
 
-// InsertVisits adds visits in one transaction, skipping existing ones.
+// InsertVisits adds timed visits in one transaction, skipping ones that exist
+// (same source and time). Points without a time come only from the legacy
+// import, so a visit without one is an error here.
 func (r *Places) InsertVisits(ctx context.Context, vs []places.Visit) (int, error) {
+	for _, v := range vs {
+		if v.Timestamp.IsZero() {
+			return 0, fmt.Errorf("store.Places.InsertVisits: visit %s has no time", v.ID)
+		}
+	}
 	tx, err := r.s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err

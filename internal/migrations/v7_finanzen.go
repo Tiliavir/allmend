@@ -48,6 +48,7 @@ CREATE TABLE fin_securities (
 	archived      INTEGER NOT NULL CHECK (archived IN (0, 1)),
 	archived_at   TEXT    NOT NULL DEFAULT '' CHECK (archived_at = '' OR (archived = 1 AND date(archived_at) = archived_at)),
 	risk_override INTEGER NOT NULL DEFAULT 0 CHECK (risk_override BETWEEN 0 AND 7),
+	notes         TEXT    NOT NULL DEFAULT '',
 	version       INTEGER NOT NULL,
 	created_at    TEXT    NOT NULL,
 	updated_at    TEXT    NOT NULL
@@ -83,6 +84,7 @@ CREATE TABLE fin_dividends (
 	owner_id     TEXT    NOT NULL REFERENCES accounts(id),
 	security_id  TEXT    NOT NULL REFERENCES fin_securities(id),
 	date         TEXT    NOT NULL CHECK (date(date) = date),
+	currency     TEXT    NOT NULL CHECK (length(currency) = 3 AND currency GLOB '[A-Z][A-Z][A-Z]'),
 	amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
 	version      INTEGER NOT NULL,
 	created_at   TEXT    NOT NULL,
@@ -93,6 +95,7 @@ CREATE INDEX fin_dividends_owner ON fin_dividends(owner_id, security_id, date);
 CREATE TABLE fin_years (
 	owner_id          TEXT    NOT NULL REFERENCES accounts(id),
 	year              INTEGER NOT NULL CHECK (year BETWEEN 1900 AND 2200),
+	currency          TEXT    NOT NULL CHECK (length(currency) = 3 AND currency GLOB '[A-Z][A-Z][A-Z]'),
 	income_cents      INTEGER NOT NULL CHECK (income_cents >= 0),
 	tax_cents         INTEGER NOT NULL CHECK (tax_cents >= 0),
 	pension_cents     INTEGER NOT NULL CHECK (pension_cents >= 0),
@@ -149,6 +152,9 @@ CREATE TABLE fin_runs (
 // old price and exchange-rate caches. Each legacy record is decoded strictly
 // (unknown fields, wrong types, currencies that do not match, invalid values
 // and sells beyond the holding stop the migration, naming the records).
+// A dividend keeps the currency it was paid in; a year keeps its currency,
+// which all its amounts must share. The source and note written into a
+// composition by hand become the security's notes.
 // The old composition cache is not imported: it is refetched.
 func v7(ctx context.Context, tx db.Tx, env db.MigrationEnv) error {
 	if _, err := tx.ExecContext(ctx, v7Schema); err != nil {
@@ -345,6 +351,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`, a.ID, a.OwnerID, a.
 }
 
 type legacyComposition struct {
+	Source      string `json:"_source"`
+	Note        string `json:"_note"`
 	Sectors     []legacyWeight
 	Countries   []legacyWeight
 	Currencies  []legacyWeight
@@ -393,6 +401,7 @@ func (im *finImport) security(ctx context.Context, r legacyRow) error {
 		if err := decode(v.CompositionJSON, &c); err != nil {
 			return fmt.Errorf("composition_json: %w", err)
 		}
+		s.Notes = compositionNotes(c)
 		for _, g := range []struct {
 			dim string
 			ws  []legacyWeight
@@ -406,8 +415,8 @@ func (im *finImport) security(ctx context.Context, r legacyRow) error {
 		return invalid(err)
 	}
 	if _, err := im.tx.ExecContext(ctx, `INSERT INTO fin_securities (id, owner_id, name, isin, ticker, kind, currency, symbol, archived, archived_at,
-	risk_override, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-		s.ID, s.OwnerID, s.Name, s.ISIN, s.Ticker, s.Kind, s.Currency, s.Symbol, s.Archived, s.ArchivedAt, s.RiskOverride, r.created, r.updated); err != nil {
+	risk_override, notes, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+		s.ID, s.OwnerID, s.Name, s.ISIN, s.Ticker, s.Kind, s.Currency, s.Symbol, s.Archived, s.ArchivedAt, s.RiskOverride, s.Notes, r.created, r.updated); err != nil {
 		return err
 	}
 	for _, w := range s.Weights {
@@ -421,6 +430,19 @@ func (im *finImport) security(ctx context.Context, r legacyRow) error {
 	}
 	im.secCur[s.ID] = s.Currency
 	return nil
+}
+
+// compositionNotes turns the hand-written source and note of a composition
+// into Markdown notes.
+func compositionNotes(c legacyComposition) string {
+	var parts []string
+	if s := strings.TrimSpace(c.Source); s != "" {
+		parts = append(parts, "Quelle der Zusammensetzung: "+s)
+	}
+	if n := strings.TrimSpace(c.Note); n != "" {
+		parts = append(parts, n)
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 func (im *finImport) transaction(ctx context.Context, r legacyRow) error {
@@ -479,15 +501,16 @@ func (im *finImport) dividend(ctx context.Context, r legacyRow) error {
 		return errors.New("id im Datensatz weicht ab")
 	case !ok:
 		return fmt.Errorf("unbekanntes Wertpapier %q", v.SecurityID)
-	case v.Currency != "" && v.Currency != cur:
-		return fmt.Errorf("Währung %s, das Wertpapier handelt in %s", v.Currency, cur)
 	}
-	d := finanzen.Dividend{ID: r.id, OwnerID: im.owner, SecurityID: v.SecurityID, Date: v.Date, AmountCents: v.Amount}
+	if v.Currency == "" {
+		v.Currency = cur
+	}
+	d := finanzen.Dividend{ID: r.id, OwnerID: im.owner, SecurityID: v.SecurityID, Date: v.Date, Currency: v.Currency, AmountCents: v.Amount}
 	if err := finanzen.CheckDividend(d); err != nil {
 		return invalid(err)
 	}
-	_, err := im.tx.ExecContext(ctx, `INSERT INTO fin_dividends (id, owner_id, security_id, date, amount_cents, version, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, 1, ?, ?)`, d.ID, d.OwnerID, d.SecurityID, d.Date, d.AmountCents, r.created, r.updated)
+	_, err := im.tx.ExecContext(ctx, `INSERT INTO fin_dividends (id, owner_id, security_id, date, currency, amount_cents, version, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`, d.ID, d.OwnerID, d.SecurityID, d.Date, d.Currency, d.AmountCents, r.created, r.updated)
 	return err
 }
 
@@ -533,19 +556,27 @@ func (im *finImport) year(ctx context.Context, r legacyRow) error {
 	if v.ID != "" && v.ID != r.id {
 		return errors.New("id im Datensatz weicht ab")
 	}
-	if err := sameCur(im.env.BaseCurrency, map[string]string{"income_currency": v.IncomeCur, "tax_burden_currency": v.TaxCur,
+	subs := map[string]string{"income_currency": v.IncomeCur, "tax_burden_currency": v.TaxCur,
 		"pension_fund_value_currency": v.PensionCur, "cash_currency": v.CashCur, "bauspar_currency": v.BausparCur,
-		"stocks_currency": v.StocksCur, "funds_currency": v.FundsCur, "real_estate_currency": v.RealEstateCur}); err != nil {
+		"stocks_currency": v.StocksCur, "funds_currency": v.FundsCur, "real_estate_currency": v.RealEstateCur}
+	cur := im.env.BaseCurrency
+	for _, k := range sortedNames(subs) {
+		if subs[k] != "" {
+			cur = subs[k]
+			break
+		}
+	}
+	if err := sameCur(cur, subs); err != nil {
 		return err
 	}
-	y := finanzen.Year{OwnerID: im.owner, Year: int(v.Year), IncomeCents: v.Income, TaxCents: v.Tax, PensionCents: v.Pension, CashCents: v.Cash,
+	y := finanzen.Year{OwnerID: im.owner, Year: int(v.Year), Currency: cur, IncomeCents: v.Income, TaxCents: v.Tax, PensionCents: v.Pension, CashCents: v.Cash,
 		BausparCents: v.Bauspar, StocksCents: v.Stocks, FundsCents: v.Funds, RealEstateCents: v.RealEstate}
 	if err := finanzen.CheckYear(y); err != nil {
 		return invalid(err)
 	}
-	_, err := im.tx.ExecContext(ctx, `INSERT INTO fin_years (owner_id, year, income_cents, tax_cents, pension_cents, cash_cents, bauspar_cents,
-	stocks_cents, funds_cents, real_estate_cents, comment, version, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 1, ?)`,
-		y.OwnerID, y.Year, y.IncomeCents, y.TaxCents, y.PensionCents, y.CashCents, y.BausparCents, y.StocksCents, y.FundsCents, y.RealEstateCents, r.updated)
+	_, err := im.tx.ExecContext(ctx, `INSERT INTO fin_years (owner_id, year, currency, income_cents, tax_cents, pension_cents, cash_cents, bauspar_cents,
+	stocks_cents, funds_cents, real_estate_cents, comment, version, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 1, ?)`,
+		y.OwnerID, y.Year, y.Currency, y.IncomeCents, y.TaxCents, y.PensionCents, y.CashCents, y.BausparCents, y.StocksCents, y.FundsCents, y.RealEstateCents, r.updated)
 	if err != nil && strings.Contains(err.Error(), "UNIQUE") {
 		return fmt.Errorf("Jahr %d kommt doppelt vor", y.Year)
 	}

@@ -4,6 +4,24 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.2.0] - 2026-11-09
+
+Import of a real almanac database works now (the dry run of 0.1.0 failed).
+
+### Added
+
+- Finanzen: notes on securities (Markdown); the hand-written source of an
+  old composition is imported into them.
+- Finanzen: a dividend has its own payout currency.
+- Finanzen: each year of the history has its own currency.
+- Orte: GPS tracks without times (old KMZ lines) are imported and shown on
+  their trip.
+
+### Changed
+
+- The released migration steps 0006 and 0007 were corrected in place
+  (see ADR finance-currencies); 0.1.0 never completed an import.
+
 ## [0.1.0] - 2026-11-09
 
 First release of Allmend, the rewrite of almanac as a family workbench.
