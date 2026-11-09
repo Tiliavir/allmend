@@ -4,6 +4,14 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.2.1] - 2026-11-09
+
+### Fixed
+
+- Orte: the map shows OpenStreetMap tiles again. The tiles are requested with
+  the site's origin as referrer; without any referrer OpenStreetMap blocks
+  them (403, tile usage policy).
+
 ## [0.2.0] - 2026-11-09
 
 Import of a real almanac database works now (the dry run of 0.1.0 failed).
