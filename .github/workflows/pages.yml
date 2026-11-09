@@ -29,7 +29,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - id: pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
       - name: Export
         run: go run ./cmd/allmend demo -base "${BASE_PATH%/}/" _site
         env:
