@@ -1,0 +1,15 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>Touren</h1><a class="button" href="/velo/touren/neu">Tour erfassen</a></div>
+{{template "velonav" "tours"}}
+<form class="filters" method="get" action="/velo/touren">
+<label>Jahr<select name="jahr">{{range $d.Years}}<option value="{{.}}"{{if eq . $d.Year}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+<button class="button secondary" type="submit">Anzeigen</button>
+</form>
+{{if $d.Tours}}<div class="card table-wrap"><table class="tours">
+<thead><tr><th scope="col">Datum</th><th scope="col">Tour</th><th scope="col">Velo</th><th scope="col" class="num">km</th><th scope="col" class="num">Höhenm.</th></tr></thead>
+<tbody>{{range $d.Tours}}<tr><td>{{.Date}}</td><td><a href="/velo/touren/{{.ID}}">{{if .Title}}{{.Title}}{{else}}Tour{{end}}</a></td><td>{{.Bike}}</td><td class="num">{{num1 .DistanceKm}}</td><td class="num">{{if .ElevationM}}{{int .ElevationM}}{{else}}–{{end}}</td></tr>
+{{end}}</tbody>
+<tfoot><tr><th scope="row" colspan="3">{{len $d.Tours}} Touren</th><td class="num"><b>{{km $d.Km}}</b></td><td></td></tr></tfoot>
+</table></div>{{else}}<p class="muted">Keine Touren in {{$d.Year}}.</p>{{end}}
+{{end}}

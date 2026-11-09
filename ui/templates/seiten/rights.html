@@ -1,0 +1,19 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>Rechte: {{$d.Page.Title}}</h1><a class="button secondary" href="/seiten/{{$d.Page.Slug}}">Zurück</a></div>
+<form class="stack wide" method="post" action="/seiten/{{$d.Page.Slug}}/rechte">
+<p class="muted">{{$d.Owner}} hat die Seite angelegt und darf sie immer lesen und bearbeiten.</p>
+<fieldset><legend>Lesen</legend>
+<label class="check"><input type="radio" name="read" value="all"{{if $d.Page.ReadAll}} checked{{end}}>Alle mit Zugriff auf Seiten</label>
+<label class="check"><input type="radio" name="read" value="some"{{if not $d.Page.ReadAll}} checked{{end}}>Nur ausgewählte:</label>
+{{range $d.Candidates}}<label class="check indent"><input type="checkbox" name="reader" value="{{.ID}}"{{if index $d.Readers .ID}} checked{{end}}>{{.DisplayName}}</label>
+{{end}}</fieldset>
+<fieldset><legend>Bearbeiten</legend>
+<label class="check"><input type="radio" name="write" value="all"{{if $d.Page.WriteAll}} checked{{end}}>Alle mit Zugriff auf Seiten</label>
+<label class="check"><input type="radio" name="write" value="some"{{if not $d.Page.WriteAll}} checked{{end}}>Nur ausgewählte:</label>
+{{range $d.Candidates}}<label class="check indent"><input type="checkbox" name="writer" value="{{.ID}}"{{if index $d.Writers .ID}} checked{{end}}>{{.DisplayName}}</label>
+{{end}}</fieldset>
+<p class="hint">Wer bearbeiten darf, darf auch lesen.</p>
+<div class="actions"><button class="button" type="submit">Speichern</button></div>
+</form>
+{{end}}

@@ -1,0 +1,68 @@
+{{define "content"}}
+{{$d := .Data}}{{$c := $d.Currency}}
+<div class="page-title"><h1>{{$d.Name}}</h1>
+<div class="actions"><a class="button secondary" href="/finanzen/wertpapiere/{{$d.ID}}/bearbeiten">Bearbeiten</a><a class="button secondary" href="/finanzen/wertpapiere/{{$d.ID}}/dividenden/neu">Dividende</a><a class="button secondary" href="/finanzen/wertpapiere/{{$d.ID}}/transaktionen/neu?typ=verkauf">Verkauf</a><a class="button" href="/finanzen/wertpapiere/{{$d.ID}}/transaktionen/neu">Kauf</a></div></div>
+{{template "finnav" "securities"}}
+<p class="muted">{{kindLabel $d.Kind}}{{if $d.ISIN}} · {{$d.ISIN}}{{end}}{{if $d.Ticker}} · {{$d.Ticker}}{{end}}{{if $d.Symbol}} · Kurse: {{$d.Symbol}}{{else}} · ohne Kurssymbol{{end}}{{if $d.Archived}} · <span class="badge">archiviert {{dateDE $d.ArchivedAt}}</span>{{end}}</p>
+<div class="stats">
+<div class="stat"><span class="label">Bestand</span><span class="value">{{qty $d.Held}}</span><span class="muted small">{{if $d.HasPrice}}Kurs {{money $d.PriceCents $c}} am {{dateDE $d.PriceDate}}{{else}}kein Kurs{{end}}</span></div>
+<div class="stat"><span class="label">Wert</span><span class="value">{{if $d.HasPrice}}{{money $d.ValueCents $c}}{{else}}–{{end}}</span><span class="muted small">Kosten {{money $d.CostCents $c}}</span></div>
+<div class="stat"><span class="label">Kursgewinn offen</span><span class="value {{gaincls $d.UnrealizedCents}}">{{if $d.HasPrice}}{{money $d.UnrealizedCents $c}}{{else}}–{{end}}</span><span class="muted small">realisiert <span class="{{gaincls $d.RealizedCents}}">{{money $d.RealizedCents $c}}</span></span></div>
+<div class="stat"><span class="label">Risikoklasse</span><span class="value">{{if $d.RiskClass}}{{$d.RiskClass}} / 7{{else}}–{{end}}</span><span class="muted small">{{if not $d.RiskClass}}zu wenige Kurse{{else if $d.RiskDerived}}aus Schwankung der Kurse{{else}}manuell{{end}}</span></div>
+</div>
+{{if $d.Chart}}<section class="card" aria-labelledby="kv">
+<h2 id="kv">Kursverlauf</h2>
+<div class="chart"><canvas data-chart="sec-chart" role="img" aria-label="Schlusskurse von {{$d.Name}}"></canvas></div>
+<script type="application/json" id="sec-chart">{{$d.Chart}}</script>
+</section>{{end}}
+<div class="grid-3">
+<section class="card" aria-labelledby="calc">
+<h2 id="calc">Rechner</h2>
+<table class="kv"><tbody>
+<tr><th scope="row">Kosten (inkl. Gebühren und Steuern)</th><td class="num">{{money $d.CostCents $c}}</td></tr>
+<tr><th scope="row">davon Gebühren</th><td class="num">{{money $d.FeesCents $c}}</td></tr>
+<tr><th scope="row">davon Steuern</th><td class="num">{{money $d.TaxesCents $c}}</td></tr>
+<tr><th scope="row">Kursgewinn offen, nach Steuern ({{$d.TaxLabel}})</th><td class="num">{{money (afterTax $d.UnrealizedCents) $c}}</td></tr>
+<tr><th scope="row">Realisiert, nach Steuern</th><td class="num">{{money (afterTax $d.RealizedCents) $c}}</td></tr>
+<tr><th scope="row">Dividenden brutto / netto</th><td class="num">{{money $d.DividendsCents $c}} / {{money (afterTax $d.DividendsCents) $c}}</td></tr>
+<tr class="strong"><th scope="row">Gewinn gesamt</th><td class="num {{gaincls $d.GainCents}}">{{money $d.GainCents $c}}</td></tr>
+</tbody></table>
+</section>
+<section class="card" aria-labelledby="comp">
+<h2 id="comp">Zusammensetzung</h2>
+{{range $d.Dims}}{{$ws := index $d.Composition .ID}}{{if $ws}}<h3>{{.Label}}</h3>{{template "weights" $ws}}{{end}}{{end}}
+{{if not $d.Composition}}<p class="muted small">Keine Daten. Erfasse sie beim Bearbeiten oder warte auf Alpha Vantage.</p>{{end}}
+</section>
+</div>
+<section class="card" aria-labelledby="tx">
+<h2 id="tx">Transaktionen</h2>
+{{if $d.Transactions}}<div class="table-wrap"><table>
+<thead><tr><th scope="col">Datum</th><th scope="col">Typ</th><th scope="col" class="num">Stück</th><th scope="col" class="num">Kurs</th><th scope="col" class="num">Gebühren</th><th scope="col" class="num">Steuern</th></tr></thead>
+<tbody>{{range $d.Transactions}}<tr><td><a href="/finanzen/transaktionen/{{.ID}}">{{dateDE .Date}}</a></td><td>{{if eq .Type "buy"}}Kauf{{else}}Verkauf{{end}}</td><td class="num">{{qty .Quantity}}</td><td class="num">{{money .PriceCents $c}}</td><td class="num">{{money .FeesCents $c}}</td><td class="num">{{money .TaxesCents $c}}</td></tr>
+{{end}}</tbody></table></div>{{else}}<p class="muted">Noch keine Transaktionen.</p>{{end}}
+</section>
+<section class="card" aria-labelledby="dv">
+<h2 id="dv">Dividenden</h2>
+{{if $d.Dividends}}<div class="grid-3">
+<div class="table-wrap"><table>
+<thead><tr><th scope="col">Datum</th><th scope="col" class="num">Brutto</th><th scope="col" class="num">Netto</th><th scope="col" class="num">pro Stück</th></tr></thead>
+<tbody>{{range $d.Dividends}}<tr><td><a href="/finanzen/dividenden/{{.ID}}">{{dateDE .Date}}</a></td><td class="num">{{money .AmountCents $c}}</td><td class="num">{{money (afterTax .AmountCents) $c}}</td><td class="num">{{if .PerUnitCents}}{{money .PerUnitCents $c}}{{else}}–{{end}}</td></tr>
+{{end}}</tbody></table></div>
+<div class="table-wrap"><table>
+<thead><tr><th scope="col">Jahr</th><th scope="col" class="num">Brutto</th><th scope="col" class="num">Netto</th></tr></thead>
+<tbody>{{range $d.DividendYears}}<tr><td>{{.Year}}</td><td class="num">{{money .Cents $c}}</td><td class="num">{{money (afterTax .Cents) $c}}</td></tr>
+{{end}}</tbody></table></div>
+</div>{{else}}<p class="muted">Noch keine Dividenden.</p>{{end}}
+</section>
+<details class="card"><summary>{{if $d.Archived}}Archivierung aufheben{{else}}Archivieren{{end}} oder löschen</summary>
+<form class="stack" method="post" action="/finanzen/wertpapiere/{{$d.ID}}/archiv">
+<input type="hidden" name="archived" value="{{if $d.Archived}}0{{else}}1{{end}}">
+<p class="muted small">Archivierte Wertpapiere zählen nicht mehr zum Vermögen und bekommen keine neuen Kurse.</p>
+<div class="actions"><button class="button secondary" type="submit">{{if $d.Archived}}Wieder aktiv setzen{{else}}Archivieren{{end}}</button></div>
+</form>
+<form class="stack" method="post" action="/finanzen/wertpapiere/{{$d.ID}}/loeschen">
+<p class="muted small">Löschen geht nur ohne Transaktionen und Dividenden.</p>
+<label class="check"><input type="checkbox" name="confirm" value="1" required>Ja, {{$d.Name}} löschen</label>
+<div class="actions"><button class="button danger" type="submit">Löschen</button></div>
+</form></details>
+{{end}}

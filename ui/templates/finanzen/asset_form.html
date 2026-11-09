@@ -1,0 +1,32 @@
+{{define "content"}}
+{{$a := .Data.Asset}}
+<div class="page-title"><h1>{{if $a.ID}}{{$a.Name}}{{else}}Neue Anlage{{end}}</h1><a class="button secondary" href="/finanzen">Abbrechen</a></div>
+<form class="stack" method="post" action="{{if $a.ID}}/finanzen/anlagen/{{$a.ID}}{{else}}/finanzen/anlagen{{end}}">
+{{if $a.ID}}<input type="hidden" name="version" value="{{$a.Version}}">{{end}}
+<div class="fields">
+<label>Name<input type="text" name="name" maxlength="80" required value="{{$a.Name}}"></label>
+<label>Art<select name="kind" required><option value="">Bitte wählen</option>{{range .Data.Kinds}}<option value="{{.ID}}"{{if eq .ID $a.Kind}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+<label>Kategorie<input type="text" name="category" maxlength="60" value="{{$a.Category}}" placeholder="z. B. Reka, Grundstück"></label>
+</div>
+<div class="fields">
+<label>Wert<input type="text" name="value" inputmode="decimal" required value="{{moneyInput $a.ValueCents}}"></label>
+<label>Währung<input type="text" name="currency" maxlength="3" minlength="3" pattern="[A-Za-z]{3}" required value="{{$a.Currency}}"></label>
+<label>Stand<input type="date" name="as_of" value="{{$a.AsOf}}"></label>
+<label>Fällig (Bauspar)<input type="date" name="maturity" value="{{$a.MaturityDate}}"></label>
+</div>
+<div class="fields">
+<label>Kosten<input type="text" name="cost" inputmode="decimal" value="{{moneyInput $a.CostCents}}"></label>
+<label>Eingezahlt<input type="text" name="paid_in" inputmode="decimal" value="{{moneyInput $a.PaidInCents}}"></label>
+<label>Ausschüttungen<input type="text" name="distributions" inputmode="decimal" value="{{moneyInput $a.DistributionsCents}}"></label>
+<label>Steuerfreibetrag<input type="text" name="tax_allowance" inputmode="decimal" value="{{moneyInput $a.TaxAllowanceCents}}"></label>
+</div>
+<p class="hint">Gewinn = Wert − Kosten − Eingezahlt + Ausschüttungen. Bei Konten und Vorsorge zählt er nicht zum Gesamtgewinn.</p>
+<label>Kommentar<textarea name="comment" rows="3">{{$a.Comment}}</textarea></label>
+<div class="actions"><button class="button" type="submit">Speichern</button></div>
+</form>
+{{if $a.ID}}<details class="card"><summary>Anlage löschen</summary>
+<form class="stack" method="post" action="/finanzen/anlagen/{{$a.ID}}/loeschen">
+<label class="check"><input type="checkbox" name="confirm" value="1" required>Ja, {{$a.Name}} löschen</label>
+<div class="actions"><button class="button danger" type="submit">Löschen</button></div>
+</form></details>{{end}}
+{{end}}

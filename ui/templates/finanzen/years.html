@@ -1,0 +1,23 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>Verlauf</h1><a class="button" href="/finanzen/verlauf/neu">Jahr erfassen</a></div>
+{{template "finnav" "years"}}
+{{if $d.Chart}}<section class="card" aria-labelledby="vc">
+<h2 id="vc">Vermögen je Jahr</h2>
+<div class="chart"><canvas data-chart="years-chart" role="img" aria-label="Vermögen je Jahr nach Kategorie"></canvas></div>
+<script type="application/json" id="years-chart">{{$d.Chart}}</script>
+</section>
+<section class="card" aria-labelledby="vt">
+<h2 id="vt">Jahre</h2>
+<p class="hint">Beträge in {{$d.Base}}, gerundet.</p>
+<div class="table-wrap"><table>
+<thead><tr><th scope="col">Jahr</th><th scope="col" class="num">Einkommen</th><th scope="col" class="num">Steuern</th><th scope="col" class="num">PK</th><th scope="col" class="num">Barmittel</th><th scope="col" class="num">Bauspar</th><th scope="col" class="num">Aktien</th><th scope="col" class="num">Fonds</th><th scope="col" class="num">Grundstück</th><th scope="col" class="num">Gesamt</th></tr></thead>
+<tbody>{{range $d.Years}}<tr>
+<td><a href="/finanzen/verlauf/{{.Year.Year}}">{{.Year.Year}}</a></td>
+<td class="num">{{whole .IncomeCents $d.Base}}</td><td class="num">{{whole .TaxCents $d.Base}}</td><td class="num">{{whole .PensionCents $d.Base}}</td>
+<td class="num">{{whole .CashCents $d.Base}}</td><td class="num">{{whole .BausparCents $d.Base}}</td><td class="num">{{whole .StocksCents $d.Base}}</td>
+<td class="num">{{whole .FundsCents $d.Base}}</td><td class="num">{{whole .RealEstateCents $d.Base}}</td><td class="num"><strong>{{whole .TotalCents $d.Base}}</strong></td>
+</tr>{{if .HTML}}<tr class="note"><td></td><td colspan="9" class="prose small">{{.HTML}}</td></tr>{{end}}
+{{end}}</tbody></table></div>
+</section>{{else}}<p class="muted">Noch keine Jahre erfasst.</p>{{end}}
+{{end}}

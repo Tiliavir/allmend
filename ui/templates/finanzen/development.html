@@ -1,0 +1,37 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>Entwicklung</h1></div>
+{{template "finnav" "development"}}
+<form class="filters" method="get" action="/finanzen/entwicklung">
+<label>Wertpapier<select name="wertpapier"><option value="">Alle</option>{{range $d.Securities}}<option value="{{.ID}}"{{if eq .ID $d.Filter.SecurityID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+<label>Art<select name="art"><option value="">Alle</option>{{range $d.Kinds}}<option value="{{.ID}}"{{if eq .ID $d.Filter.Kind}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+<label>Zeitraum<select name="zeitraum">{{range $d.Ranges}}<option value="{{.ID}}"{{if eq .ID $d.Range}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+<button class="button secondary" type="submit">Anzeigen</button>
+</form>
+{{if $d.Missing}}<div class="flash error" role="status"><ul>{{range $d.Missing}}<li>{{.}} (betroffene Wertpapiere fehlen)</li>{{end}}</ul></div>{{end}}
+{{if $d.ValueChart}}
+<div class="stats">
+<div class="stat"><span class="label">Depotwert {{dateDE (index $d.Dates $d.Last)}}</span><span class="value">{{eurf (index $d.Value $d.Last) $d.Base}}</span></div>
+<div class="stat"><span class="label">Kursgewinn offen</span><span class="value">{{eurf (index $d.Unrealized $d.Last) $d.Base}}</span></div>
+<div class="stat"><span class="label">Realisiert</span><span class="value">{{eurf (index $d.Realized $d.Last) $d.Base}}</span></div>
+<div class="stat"><span class="label">Dividenden</span><span class="value">{{eurf (index $d.Dividends $d.Last) $d.Base}}</span></div>
+</div>
+<section class="card" aria-labelledby="dw">
+<h2 id="dw">Depotwert</h2>
+<div class="chart"><canvas data-chart="dev-value" role="img" aria-label="Depotwert über die Zeit"></canvas></div>
+<script type="application/json" id="dev-value">{{$d.ValueChart}}</script>
+</section>
+<section class="card" aria-labelledby="gw">
+<h2 id="gw">Gewinn</h2>
+<div class="chart"><canvas data-chart="dev-gain" role="img" aria-label="Kursgewinn, realisierter Gewinn und Dividenden über die Zeit"></canvas></div>
+<script type="application/json" id="dev-gain">{{$d.GainChart}}</script>
+</section>
+{{if $d.IndexChart}}<section class="card" aria-labelledby="ix">
+<h2 id="ix">Kurse im Vergleich</h2>
+<p class="hint">100 = durchschnittlicher Kaufkurs. {{if $d.Omitted}}{{$d.Omitted}} weitere Wertpapiere sind ausgeblendet; wähle eins im Filter.{{end}}</p>
+<div class="chart"><canvas data-chart="dev-index" role="img" aria-label="Kurs je Wertpapier relativ zum Kaufkurs"></canvas></div>
+<script type="application/json" id="dev-index">{{$d.IndexChart}}</script>
+</section>{{end}}
+<p class="hint">Fremdwährungen sind mit dem aktuellen Wechselkurs umgerechnet.</p>
+{{else}}<p class="muted">Für diese Auswahl gibt es noch keine Kurse.</p>{{end}}
+{{end}}

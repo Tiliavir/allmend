@@ -1,0 +1,12 @@
+{{define "content"}}
+<div class="card login">
+<h1>Anmelden</h1>
+{{if .Data.Google}}<a class="button google" href="/anmelden/google">{{icon "google"}}Mit Google anmelden</a>
+<p class="divider">oder mit Passwort</p>{{end}}
+<form class="stack" method="post" action="/anmelden">
+<label>E-Mail<input type="email" name="email" autocomplete="username" required value="{{.Data.Email}}"></label>
+<label>Passwort<input type="password" name="password" autocomplete="current-password" required></label>
+<div class="actions"><button class="button" type="submit">Anmelden</button></div>
+</form>
+</div>
+{{end}}

@@ -1,0 +1,37 @@
+{{define "layout"}}<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{if .Title}}{{.Title}} · {{end}}Allmend</title>
+<link rel="stylesheet" href="/static/allmend.css">
+<link rel="icon" href="/static/allmend.svg" type="image/svg+xml">
+{{if eq .Module "orte"}}<link rel="stylesheet" href="/static/vendor/leaflet-1.9.4.css">
+{{end}}{{if .Demo}}<script src="/static/demo.js" type="module"></script>
+{{end}}{{range .Scripts}}<script src="{{.Src}}"{{if .Module}} type="module"{{else}} defer{{end}}></script>
+{{end}}
+</head>
+<body class="{{if .Module}}m-{{.Module}}{{end}}">
+<header class="site-header">
+<a class="brand" href="/">{{icon "logo"}}Allmend</a>
+{{if .Account}}<nav class="nav" aria-label="Module">
+{{range .Nav}}<a href="{{.Path}}"{{if .Current}} aria-current="page"{{end}}>{{.Name}}</a>
+{{end}}</nav>
+<div class="user"><details>
+<summary><span class="avatar" aria-hidden="true">{{.Initial}}</span>{{.Account.DisplayName}}</summary>
+<div class="menu">
+<a href="/konto">Konto</a>
+{{if .Account.IsAdmin}}<a href="/verwaltung">Verwaltung</a>{{end}}
+<form method="post" action="/abmelden"><button type="submit">Abmelden</button></form>
+</div>
+</details></div>
+{{else}}<a class="button secondary" href="/anmelden">Anmelden</a>{{end}}
+</header>
+{{if .Demo}}<p class="demo-banner">Demo mit erfundenen Daten – Änderungen werden nicht gespeichert. <a href="https://github.com/Tiliavir/almanac">Quellcode</a></p>
+{{end}}<main>
+{{if .Flash}}<p class="flash" role="status">{{.Flash}}</p>{{end}}
+{{if .Error}}<p class="flash error" role="alert">{{.Error}}</p>{{end}}
+{{template "content" .}}
+</main>
+</body>
+</html>{{end}}

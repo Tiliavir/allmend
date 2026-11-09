@@ -1,0 +1,22 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>{{if $d.Archived}}Archivierte Wertpapiere{{else}}Wertpapiere{{end}}</h1><a class="button" href="/finanzen/wertpapiere/neu">Wertpapier erfassen</a></div>
+{{template "finnav" "securities"}}
+<p>{{if $d.Archived}}<a href="/finanzen/wertpapiere">Aktive Wertpapiere</a>{{else}}<a href="/finanzen/wertpapiere?archiv=1">Archivierte Wertpapiere</a>{{end}}</p>
+<section class="card" aria-label="Liste">
+{{if $d.Securities}}<div class="table-wrap"><table>
+<thead><tr><th scope="col">Name</th><th scope="col">Art</th><th scope="col">ISIN</th><th scope="col" class="num">Bestand</th><th scope="col" class="num">Kurs</th><th scope="col" class="num">Wert</th><th scope="col" class="num">Dividenden</th><th scope="col" class="num">Gewinn</th></tr></thead>
+<tbody>{{range $d.Securities}}<tr>
+<td><a href="/finanzen/wertpapiere/{{.ID}}">{{.Name}}</a>{{if .Symbol}}<br><span class="muted small">{{.Symbol}}</span>{{end}}</td>
+<td>{{kindLabel .Kind}}</td>
+<td>{{.ISIN}}</td>
+<td class="num">{{if .Held}}{{qty .Held}}{{else}}–{{end}}</td>
+<td class="num">{{if .HasPrice}}{{money .PriceCents .Currency}}<br><span class="muted small">{{dateDE .PriceDate}}</span>{{else}}–{{end}}</td>
+<td class="num">{{if and .HasPrice .Held}}{{money .ValueCents .Currency}}{{else}}–{{end}}</td>
+<td class="num">{{if .DividendsCents}}{{money .DividendsCents .Currency}}{{else}}–{{end}}</td>
+<td class="num {{gaincls .GainCents}}">{{if or .HasPrice (not .Held)}}{{money .GainCents .Currency}}{{else}}–{{end}}</td>
+</tr>
+{{end}}</tbody></table></div>{{else}}<p class="muted">Keine Wertpapiere.</p>{{end}}
+</section>
+<p class="hint">Den Kursverlauf aller Wertpapiere im Vergleich zeigt <a href="/finanzen/entwicklung">Entwicklung</a>.</p>
+{{end}}

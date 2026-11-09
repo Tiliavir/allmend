@@ -1,0 +1,63 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>Velo</h1><a class="button" href="/velo/touren/neu">Tour erfassen</a></div>
+{{template "velonav" "overview"}}
+<form class="filters" method="get" action="/velo">
+<label>Jahr<select name="jahr">{{range $d.YearList}}<option value="{{.}}"{{if eq . $d.Year}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+{{if $d.Bikes}}<label>Velo<select name="velo"><option value="">Alle Velos</option>{{range $d.Bikes}}<option value="{{.ID}}"{{if eq .ID $d.BikeID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>{{end}}
+<button class="button secondary" type="submit">Anzeigen</button>
+</form>
+<div class="stats">
+<div class="stat"><span class="label">Distanz {{$d.Year}}</span><span class="value">{{km $d.Stats.Km}} km</span><span class="muted small">{{signed $d.DeltaKm}} km zum Vorjahr{{if eq $d.Year $d.CurYear}} bis heute{{end}}</span></div>
+<div class="stat"><span class="label">Touren</span><span class="value">{{$d.Stats.Tours}}</span><span class="muted small">Vorjahr {{$d.Previous.Tours}}</span></div>
+<div class="stat"><span class="label">Höhenmeter</span><span class="value">{{int $d.Stats.ElevationM}} m</span><span class="muted small">Vorjahr {{int $d.Previous.ElevationM}} m</span></div>
+<div class="stat"><span class="label">Ø pro Tour</span><span class="value">{{if $d.Stats.Tours}}{{num1 (div $d.Stats.Km $d.Stats.Tours)}} km{{else}}–{{end}}</span></div>
+</div>
+<div class="grid-3 velo-top">
+<section class="card chart-card" aria-labelledby="kurve">
+<h2 id="kurve">Kilometer übers Jahr{{if $d.BikeName}} · {{$d.BikeName}}{{end}}</h2>
+<div class="chart"><canvas id="velo-chart" aria-label="Kumulierte Kilometer {{$d.Year}} und {{sub $d.Year 1}}" role="img"></canvas></div>
+<script type="application/json" id="velo-data">{{$d.Chart}}</script>
+</section>
+{{if $d.ShowGoal}}<section class="card" aria-labelledby="ziel">
+<h2 id="ziel">Ziel {{$d.MonthName}}</h2>
+{{if $d.Goal}}<div class="goal">
+<svg class="ring" viewBox="0 0 140 140" role="img" aria-label="{{km $d.MonthKm}} von {{km $d.Goal}} km">
+<circle class="ring-bg" cx="70" cy="70" r="52"/>
+<circle class="ring-fg" cx="70" cy="70" r="52" stroke-dasharray="{{$d.GoalDash}}" transform="rotate(-90 70 70)"/>
+<text x="70" y="68" text-anchor="middle" class="ring-pct">{{$d.GoalPct}} %</text>
+<text x="70" y="90" text-anchor="middle" class="ring-sub">{{km $d.MonthKm}} / {{km $d.Goal}} km</text>
+</svg>
+<p class="small">{{if ge $d.MonthKm $d.Goal}}Geschafft!{{else}}Noch {{km (subf $d.Goal $d.MonthKm)}} km.{{end}}</p>
+</div>{{else}}<p class="muted">Diesen Monat {{km $d.MonthKm}} km. Kein Ziel gesetzt.</p>{{end}}
+<a class="button secondary" href="/velo/ziel/{{$d.Year}}/{{$d.GoalMonth}}">{{if $d.Goal}}Ziel ändern{{else}}Ziel setzen{{end}}</a>
+</section>{{end}}
+</div>
+<section class="card" aria-labelledby="heat">
+<h2 id="heat">Fahrtage {{$d.Year}}</h2>
+<div class="heat-wrap"><div class="heat">
+{{range $d.Heat}}{{if lt .Level 0}}<span class="h-pad"></span>{{else}}<span class="h{{.Level}}" title="{{day .Date}}{{if .Km}}: {{num1 .Km}} km{{end}}"></span>{{end}}{{end}}
+</div></div>
+<p class="heat-legend muted small" aria-hidden="true">weniger <span class="h0"></span><span class="h1"></span><span class="h2"></span><span class="h3"></span><span class="h4"></span> mehr</p>
+</section>
+<div class="grid-3">
+<section class="card" aria-labelledby="rekorde">
+<h2 id="rekorde">Persönliche Rekorde</h2>
+{{if $d.Records}}<ul class="list">
+{{range $d.Records}}<li><span>{{.Label}}</span><span class="right"><b>{{.Value}}</b><span class="muted small">{{if .TourID}}<a href="/velo/touren/{{.TourID}}">{{.Detail}}</a>{{else}}{{.Detail}}{{end}}</span></span></li>
+{{end}}</ul>{{else}}<p class="muted">Noch keine Touren.</p>{{end}}
+</section>
+<section class="card" aria-labelledby="kommentar">
+<h2 id="kommentar">Kommentar {{$d.Year}}</h2>
+{{if $d.Comment}}<div class="prose">{{$d.Comment}}</div>{{else}}<p class="muted">Noch kein Kommentar.</p>{{end}}
+<a class="button secondary" href="/velo/jahre/{{$d.Year}}/kommentar">{{if $d.Comment}}Bearbeiten{{else}}Kommentar schreiben{{end}}</a>
+</section>
+</div>
+{{if $d.Overview.Years}}<section class="card" aria-labelledby="jahre">
+<h2 id="jahre">Vergleich mit anderen Jahren</h2>
+<div class="table-wrap"><table class="months">
+<thead><tr><th scope="col">Jahr</th>{{range $i := seq 12}}<th scope="col">{{monthShort $i}}</th>{{end}}<th scope="col">km</th><th scope="col">Touren</th><th scope="col">Höhenm.</th></tr></thead>
+<tbody>{{range $d.Overview.Years}}<tr{{if eq .Year $d.Year}} class="current"{{end}}><th scope="row"><a href="/velo?jahr={{.Year}}{{if $d.BikeID}}&amp;velo={{$d.BikeID}}{{end}}">{{.Year}}</a></th>{{range .Months}}<td>{{if .}}{{km .}}{{else}}–{{end}}</td>{{end}}<td class="total">{{km .Km}}</td><td>{{.Tours}}</td><td>{{int .ElevationM}}</td></tr>
+{{end}}</tbody></table></div>
+</section>{{end}}
+{{end}}

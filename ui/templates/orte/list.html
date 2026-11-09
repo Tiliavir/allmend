@@ -1,0 +1,9 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>{{$d.List.Name}}</h1><a class="button secondary" href="/orte?person={{$d.PersonID}}">Alle Reisen</a></div>
+{{if $d.List.DateFrom}}<p class="muted">{{$d.List.DateFrom}}{{if $d.List.DateTo}} – {{$d.List.DateTo}}{{end}}</p>{{end}}
+{{if $d.List.Description}}<p class="pre">{{$d.List.Description}}</p>{{end}}
+<div class="card"><div class="map" id="karte" role="img" aria-label="Karte mit {{len $d.Places}} Orten"></div></div>
+<script type="application/json" id="karte-daten">{{$d.Map}}</script>
+{{if $d.Places}}<div class="card"><ul class="list">{{range $d.Places}}<li><span>{{.Name}}</span><span class="muted small">{{if .Description}}{{.Description}}{{end}}</span></li>{{end}}</ul></div>{{end}}
+{{end}}

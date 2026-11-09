@@ -1,0 +1,28 @@
+{{define "content"}}
+{{$y := .Data.Year}}{{$b := .Data.Base}}
+<div class="page-title"><h1>{{if $y.Version}}Jahr {{$y.Year}}{{else}}Neues Jahr{{end}}</h1><a class="button secondary" href="/finanzen/verlauf">Abbrechen</a></div>
+<form class="stack" method="post" action="{{if $y.Version}}/finanzen/verlauf/{{$y.Year}}{{else}}/finanzen/verlauf{{end}}">
+{{if $y.Version}}<input type="hidden" name="version" value="{{$y.Version}}">{{else}}
+<div class="fields"><label>Jahr<input type="number" name="year" min="1900" max="2200" required value="{{$y.Year}}"></label></div>{{end}}
+<p class="hint">Alle Beträge in {{$b}}, Stand Jahresende.</p>
+<div class="fields">
+<label>Einkommen brutto<input type="text" name="income" inputmode="decimal" value="{{moneyInput $y.IncomeCents}}"></label>
+<label>Steuern<input type="text" name="tax" inputmode="decimal" value="{{moneyInput $y.TaxCents}}"></label>
+<label>Pensionskasse<input type="text" name="pension" inputmode="decimal" value="{{moneyInput $y.PensionCents}}"></label>
+<label>Barmittel<input type="text" name="cash" inputmode="decimal" value="{{moneyInput $y.CashCents}}"></label>
+</div>
+<div class="fields">
+<label>Bauspar<input type="text" name="bauspar" inputmode="decimal" value="{{moneyInput $y.BausparCents}}"></label>
+<label>Aktien<input type="text" name="stocks" inputmode="decimal" value="{{moneyInput $y.StocksCents}}"></label>
+<label>Fonds<input type="text" name="funds" inputmode="decimal" value="{{moneyInput $y.FundsCents}}"></label>
+<label>Grundstück<input type="text" name="real_estate" inputmode="decimal" value="{{moneyInput $y.RealEstateCents}}"></label>
+</div>
+<label>Kommentar (Markdown)<textarea name="comment" rows="4">{{$y.Comment}}</textarea></label>
+<div class="actions"><button class="button" type="submit">Speichern</button></div>
+</form>
+{{if $y.Version}}<details class="card"><summary>Jahr löschen</summary>
+<form class="stack" method="post" action="/finanzen/verlauf/{{$y.Year}}/loeschen">
+<label class="check"><input type="checkbox" name="confirm" value="1" required>Ja, {{$y.Year}} löschen</label>
+<div class="actions"><button class="button danger" type="submit">Löschen</button></div>
+</form></details>{{end}}
+{{end}}

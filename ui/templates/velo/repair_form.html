@@ -1,0 +1,20 @@
+{{define "content"}}
+{{$x := .Data.Repair}}{{$b := .Data.Bike}}
+<div class="page-title"><h1>{{if $x.ID}}Reparatur bearbeiten{{else}}Reparatur erfassen{{end}} <span class="muted">· {{$b.Name}}</span></h1><a class="button secondary" href="/velo/velos/{{$b.ID}}">Abbrechen</a></div>
+<form class="stack" method="post" action="{{if $x.ID}}/velo/reparaturen/{{$x.ID}}{{else}}/velo/velos/{{$b.ID}}/reparaturen{{end}}">
+{{if $x.ID}}<input type="hidden" name="version" value="{{$x.Version}}">{{end}}
+<label>Was<input type="text" name="title" maxlength="120" required value="{{$x.Title}}"></label>
+<div class="fields">
+<label>Datum<input type="date" name="date" required value="{{$x.Date}}"></label>
+<label>Kosten ({{.Data.Base}})<input type="text" name="cost" inputmode="decimal" value="{{moneyInput $x.CostCents}}"></label>
+<label>Kilometerstand<input type="number" name="odometer" step="0.1" min="0" value="{{if $x.OdometerKm}}{{deref $x.OdometerKm}}{{end}}"></label>
+</div>
+<label>Kommentar<textarea name="comment" rows="3">{{$x.Comment}}</textarea></label>
+<div class="actions"><button class="button" type="submit">Speichern</button></div>
+</form>
+{{if $x.ID}}<details class="card"><summary>Reparatur löschen</summary>
+<form class="stack" method="post" action="/velo/reparaturen/{{$x.ID}}/loeschen">
+<label class="check"><input type="checkbox" name="confirm" value="1" required>Ja, diese Reparatur löschen</label>
+<div class="actions"><button class="button danger" type="submit">Löschen</button></div>
+</form></details>{{end}}
+{{end}}

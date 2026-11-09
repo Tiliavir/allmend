@@ -1,0 +1,22 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>Diversifikation &amp; Risiko</h1></div>
+{{template "finnav" "diversification"}}
+<form class="filters" method="get" action="/finanzen/diversifikation">
+<fieldset><legend>Anlageklassen ausblenden</legend>{{range $d.Kinds}}<label class="check"><input type="checkbox" name="ohne_art" value="{{.ID}}"{{if index $d.ExcludedKind .ID}} checked{{end}}>{{.Label}}</label>{{end}}</fieldset>
+{{if $d.Securities}}<fieldset><legend>Wertpapiere ausblenden</legend>{{range $d.Securities}}<label class="check"><input type="checkbox" name="ohne" value="{{.ID}}"{{if index $d.ExcludedSecurity .ID}} checked{{end}}>{{.Name}}</label>{{end}}</fieldset>{{end}}
+<button class="button secondary" type="submit">Anzeigen</button>
+</form>
+<div class="stats">
+<div class="stat"><span class="label">Betrachtet</span><span class="value">{{money $d.TotalCents $d.Base}}</span><span class="muted small">davon Wertpapiere {{money $d.SecuritiesCents $d.Base}}</span></div>
+<div class="stat"><span class="label">Gewichtete Risikoklasse</span><span class="value">{{if $d.Risk1}}{{$d.Risk1}} / 7{{else}}–{{end}}</span><span class="muted small">der Wertpapiere</span></div>
+</div>
+{{if $d.Missing}}<div class="flash error" role="status"><ul>{{range $d.Missing}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
+<div class="grid-3">
+<section class="card" aria-labelledby="ak"><h2 id="ak">Anlageklassen</h2>{{template "shares" $d.AssetClasses}}</section>
+<section class="card" aria-labelledby="rk"><h2 id="rk">Risikoklassen</h2>{{template "shares" $d.Risk}}</section>
+{{range $d.Dims}}<section class="card" aria-labelledby="d-{{.ID}}"><h2 id="d-{{.ID}}">{{.Label}}</h2>{{template "shares" (index $d.Dimensions .ID)}}</section>
+{{end}}
+</div>
+<p class="hint">Anteile der Wertpapiere nach ihrem Wert; Zusammensetzungen von Alpha Vantage oder manuell erfasst. Fehlende Zusammensetzungen ergeben weniger als 100 %.</p>
+{{end}}

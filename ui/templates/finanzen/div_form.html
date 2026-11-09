@@ -1,0 +1,17 @@
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.Div}}{{$s := $d.Security}}
+<div class="page-title"><h1>Dividende · {{$s.Name}}</h1><a class="button secondary" href="/finanzen/wertpapiere/{{$s.ID}}">Abbrechen</a></div>
+<form class="stack" method="post" action="{{if $v.ID}}/finanzen/dividenden/{{$v.ID}}{{else}}/finanzen/wertpapiere/{{$s.ID}}/dividenden{{end}}">
+{{if $v.ID}}<input type="hidden" name="version" value="{{$v.Version}}">{{end}}
+<div class="fields">
+<label>Datum<input type="date" name="date" required value="{{$v.Date}}"></label>
+<label>Betrag brutto ({{$s.Currency}})<input type="text" name="amount" inputmode="decimal" required value="{{moneyInput $v.AmountCents}}"></label>
+</div>
+<div class="actions"><button class="button" type="submit">Speichern</button></div>
+</form>
+{{if $v.ID}}<details class="card"><summary>Dividende löschen</summary>
+<form class="stack" method="post" action="/finanzen/dividenden/{{$v.ID}}/loeschen">
+<label class="check"><input type="checkbox" name="confirm" value="1" required>Ja, löschen</label>
+<div class="actions"><button class="button danger" type="submit">Löschen</button></div>
+</form></details>{{end}}
+{{end}}

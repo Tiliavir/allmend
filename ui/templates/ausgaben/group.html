@@ -1,0 +1,52 @@
+{{define "content"}}
+{{$d := .Data}}{{$g := $d.Group}}
+<div class="page-title"><h1>{{$g.Name}}</h1>
+<div class="actions"><a class="button secondary" href="/ausgaben/{{$g.ID}}/neu?art=zahlung">Zahlung</a><a class="button" href="/ausgaben/{{$g.ID}}/neu">Ausgabe erfassen</a></div>
+</div>
+<p class="muted small"><a href="/ausgaben">Alle Gruppen</a> · {{range $i, $p := $d.People}}{{if $i}}, {{end}}{{$p.Name}}{{end}}</p>
+<section class="section" aria-labelledby="saldo">
+<h2 id="saldo">Saldo</h2>
+{{if $d.Balances}}<div class="stats">
+{{range $d.Balances}}{{$cur := .Currency}}{{range .Nets}}<div class="stat"><span class="label">{{.Name}}{{if .Me}} (du){{end}} · {{$cur}}</span><span class="value {{gaincls .Amount}}">{{money .Amount $cur}}</span></div>
+{{end}}{{end}}</div>
+<p class="muted small">Positiv: bekommt Geld zurück. Negativ: schuldet den anderen.</p>
+{{if $d.Transfers}}<div class="card"><h3>Ausgleichen</h3><ul class="list">
+{{range $d.Transfers}}<li><span>{{if .Mine}}<b>Du</b>{{else}}{{.FromName}}{{end}} → {{.ToName}}: <b>{{money .Amount .Currency}}</b></span><a class="button secondary" href="/ausgaben/{{$g.ID}}/neu?art=zahlung&amp;von={{.From}}&amp;an={{.To}}&amp;betrag={{moneyInput .Amount}}&amp;waehrung={{.Currency}}">Als bezahlt erfassen</a></li>
+{{end}}</ul></div>{{else}}<p class="muted">Alles ausgeglichen.</p>{{end}}
+{{else}}<p class="muted">Noch nichts erfasst.</p>{{end}}
+</section>
+<section class="section" aria-labelledby="wiederkehrend">
+<div class="page-title"><h2 id="wiederkehrend">Wiederkehrend</h2><a class="button secondary" href="/ausgaben/{{$g.ID}}/wiederkehrend/neu">Monatlich erfassen</a></div>
+{{if $d.Recurrings}}<div class="card"><ul class="list">
+{{range $d.Recurrings}}<li><a href="/ausgaben/{{$g.ID}}/wiederkehrend/{{.ID}}">{{.Description}}</a><span class="muted small">{{money .Amount .Currency}} · bezahlt {{.Payer}} · für {{.For}} · am {{.Day}}. · nächste Buchung {{dateDE .Next}}</span></li>
+{{end}}</ul></div>{{else}}<p class="muted small">Keine. Monatliche Ausgaben wie Miete oder Strom werden hier einmal erfasst und dann jeden Monat gebucht.</p>{{end}}
+</section>
+<section class="section" aria-labelledby="eintraege">
+<h2 id="eintraege">Einträge</h2>
+{{if $d.Years}}<form class="filters" method="get" action="/ausgaben/{{$g.ID}}">
+<label>Jahr<select name="jahr">{{range $d.Years}}<option value="{{.}}"{{if eq . $d.Year}} selected{{end}}>{{.}}</option>{{end}}<option value=""{{if eq "" $d.Year}} selected{{end}}>Alle</option></select></label>
+<button class="button secondary" type="submit">Anzeigen</button>
+</form>
+{{if $d.Spent}}<p class="muted small">Ausgaben {{if $d.Year}}{{$d.Year}}{{else}}gesamt{{end}}: {{range $i, $s := $d.Spent}}{{if $i}} · {{end}}{{money $s.Amount $s.Currency}}{{end}}</p>{{end}}
+<div class="card table-wrap"><table class="entries">
+<thead><tr><th scope="col">Datum</th><th scope="col">Beschreibung</th><th scope="col">Bezahlt</th><th scope="col">Für</th><th scope="col" class="num">Betrag</th><th scope="col" class="num">Für dich</th></tr></thead>
+<tbody>{{range $d.Rows}}<tr{{if eq .Kind "zahlung"}} class="payment"{{end}}><td>{{dateDE .Date}}</td>
+<td><a href="/ausgaben/{{$g.ID}}/eintraege/{{.ID}}">{{if .Description}}{{.Description}}{{else}}Zahlung{{end}}</a>{{if .Category}} <span class="badge">{{.Category}}</span>{{end}}{{if .RecurringID}} <span class="badge">monatlich</span>{{end}}</td>
+<td>{{if .Unsplit}}–{{else}}{{.Payer}}{{end}}</td>
+<td>{{if eq .Kind "zahlung"}}→ {{.Receiver}}{{else if .Unsplit}}<span class="muted">nicht geteilt</span>{{else}}{{.For}}{{end}}</td>
+<td class="num">{{money .Amount .Currency}}</td>
+<td class="num {{gaincls .Mine}}">{{if .Mine}}{{money .Mine .Currency}}{{else}}–{{end}}</td></tr>
+{{else}}<tr><td colspan="6" class="muted">Keine Einträge in {{$d.Year}}.</td></tr>
+{{end}}</tbody></table></div>
+{{end}}
+{{if $d.Empty}}<details class="card"><summary>Aus Splitwise importieren</summary>
+<form class="stack" method="post" action="/ausgaben/{{$g.ID}}/import" enctype="multipart/form-data">
+<p class="muted small">CSV-Export einer Splitwise-Gruppe („Export as spreadsheet“). Geht nur, solange diese Gruppe leer ist. Jede Zeile wird geprüft, ebenso der Saldo am Ende der Datei; ein Fehler bricht den ganzen Import ab. Zeilen ohne Wirkung auf den Saldo kommen als „nicht geteilt“ herein – Splitwise exportiert dort nicht, wer bezahlt hat.</p>
+<label>Datei<input type="file" name="datei" accept="text/csv,.csv" required></label>
+<fieldset><legend>Namen in der Datei (Spaltenüberschrift)</legend>
+{{range $d.People}}<label>{{.Name}}<input type="text" name="name_{{.ID}}" required value="{{.Name}}"></label>
+{{end}}</fieldset>
+<div class="actions"><button class="button" type="submit">Importieren</button></div>
+</form></details>{{end}}
+</section>
+{{end}}

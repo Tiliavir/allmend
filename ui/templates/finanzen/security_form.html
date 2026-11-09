@@ -1,0 +1,24 @@
+{{define "content"}}
+{{$d := .Data}}{{$s := $d.Security}}
+<div class="page-title"><h1>{{if $s.ID}}{{$s.Name}} bearbeiten{{else}}Neues Wertpapier{{end}}</h1><a class="button secondary" href="{{if $s.ID}}/finanzen/wertpapiere/{{$s.ID}}{{else}}/finanzen/wertpapiere{{end}}">Abbrechen</a></div>
+<form class="stack" method="post" action="{{if $s.ID}}/finanzen/wertpapiere/{{$s.ID}}{{else}}/finanzen/wertpapiere{{end}}">
+{{if $s.ID}}<input type="hidden" name="version" value="{{$s.Version}}">{{end}}
+<div class="fields">
+<label>Name<input type="text" name="name" maxlength="80" required value="{{$s.Name}}"></label>
+<label>Art<select name="kind" required><option value="">Bitte wählen</option>{{range $d.Kinds}}<option value="{{.ID}}"{{if eq .ID $s.Kind}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+<label>Währung<input type="text" name="currency" maxlength="3" minlength="3" pattern="[A-Za-z]{3}" required value="{{$s.Currency}}"></label>
+</div>
+<div class="fields">
+<label>ISIN<input type="text" name="isin" maxlength="12" value="{{$s.ISIN}}"></label>
+<label>Ticker<input type="text" name="ticker" maxlength="20" value="{{$s.Ticker}}"></label>
+<label>Kurssymbol (Alpha Vantage)<input type="text" name="symbol" maxlength="30" value="{{$s.Symbol}}" placeholder="z. B. VWCE.DEX"></label>
+<label>Risikoklasse 1–7<input type="number" name="risk" min="1" max="7" value="{{if $s.RiskOverride}}{{$s.RiskOverride}}{{end}}" placeholder="aus Kursen"></label>
+</div>
+<p class="hint">Ohne Kurssymbol gibt es keine Kurse, keinen Wert und keine abgeleitete Risikoklasse.</p>
+<fieldset class="card"><legend>Zusammensetzung (manuell)</legend>
+<p class="hint">Eine Zeile pro Eintrag: <code>Bezeichnung = Prozent</code>, z. B. <code>Technologie = 30</code>. Liefert Alpha Vantage einen Bereich, ersetzt er den manuellen.</p>
+<div class="fields">{{range $d.Dims}}<label>{{.Label}}<textarea name="w_{{.ID}}" rows="4">{{index $d.Weights .ID}}</textarea></label>{{end}}</div>
+</fieldset>
+<div class="actions"><button class="button" type="submit">Speichern</button></div>
+</form>
+{{end}}

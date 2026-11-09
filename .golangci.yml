@@ -1,0 +1,40 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - revive
+    - misspell
+    - gosec
+    - nolintlint
+  settings:
+    misspell:
+      ignore-rules:
+        - kompensation # German domain term (Arbeitswege)
+    staticcheck:
+      checks:
+        - all
+        - -ST1000 # package comments are checked by revive
+        - -ST1005 # many errors are German UI messages and start with a noun
+    revive:
+      rules:
+        - name: exported
+          severity: warning
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [errcheck, gosec]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/tiliavir/allmend

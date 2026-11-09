@@ -1,0 +1,39 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>{{if $d.IsNew}}Neues Jahr{{else}}{{$d.Y.Year}} bearbeiten{{end}}</h1>
+<a class="button secondary" href="/arbeitswege{{if not $d.IsNew}}?jahr={{$d.Y.Year}}{{end}}">Abbrechen</a></div>
+<form class="stack wide-all" method="post" action="{{if $d.IsNew}}/arbeitswege{{else}}/arbeitswege/{{$d.Y.Year}}{{end}}">
+{{if not $d.IsNew}}<input type="hidden" name="base" value="{{$d.Y.Version}}">{{end}}
+<div class="fields">
+<label>Jahr<input type="number" name="year" min="1900" max="2200" required value="{{$d.Y.Year}}"{{if not $d.IsNew}} readonly{{end}}></label>
+<label>Auto, einfach (km)<input type="number" name="car_dist_km" step="0.1" min="0" value="{{input $d.Y.CarDistKm}}"></label>
+<label>Zug, einfach (km)<input type="number" name="train_dist_km" step="0.1" min="0" value="{{input $d.Y.TrainDistKm}}"></label>
+<label>Velo, einfach (km)<input type="number" name="bike_dist_km" step="0.1" min="0" value="{{input $d.Y.BikeDistKm}}"></label>
+</div>
+<details class="card"{{if or $d.Y.RateLowCents $d.Y.ThresholdKm}} open{{end}}>
+<summary>Pendlerpauschale abweichend vom Gesetz</summary>
+<p class="hint">Leer lassen für den gesetzlichen Satz ({{num (index $d.Statute 0)}} / {{num (index $d.Statute 1)}} ct/km, Grenze 20 km).</p>
+<div class="fields">
+<label>ct/km bis Grenze<input type="number" name="rate_low_cents" step="0.1" min="0" value="{{inputp $d.Y.RateLowCents}}"></label>
+<label>ct/km ab Grenze<input type="number" name="rate_high_cents" step="0.1" min="0" value="{{inputp $d.Y.RateHighCents}}"></label>
+<label>Grenze (km)<input type="number" name="threshold_km" step="1" min="0" value="{{inputp $d.Y.ThresholdKm}}"></label>
+</div>
+</details>
+<div class="card table-wrap">
+<table class="months form">
+<thead><tr><th scope="col">Tage</th>{{range $d.Months}}<th scope="col">{{.}}</th>{{end}}</tr></thead>
+<tbody>
+{{range $r := $d.Rows}}<tr><th scope="row">{{$r.Label}}</th>{{range $i, $v := $r.Values}}<td><input type="number" name="{{$r.Key}}_{{$i}}" step="0.5" min="0" max="31" value="{{input $v}}" aria-label="{{$r.Label}} {{index $d.Months $i}}"></td>{{end}}</tr>
+{{end}}</tbody></table>
+</div>
+<div class="actions"><button class="button" type="submit">Speichern</button></div>
+</form>
+{{if not $d.IsNew}}<details class="card">
+<summary>Jahr löschen</summary>
+<form class="stack" method="post" action="/arbeitswege/{{$d.Y.Year}}/loeschen">
+<p class="muted small">Löscht {{$d.Y.Year}} mit allen Monatswerten endgültig. Vor dem nächsten Update sichert Allmend die Datenbank, ein früheres Backup enthält das Jahr noch.</p>
+<label class="check"><input type="checkbox" name="confirm" value="1" required>Ja, {{$d.Y.Year}} löschen</label>
+<div class="actions"><button class="button danger" type="submit">Löschen</button></div>
+</form>
+</details>{{end}}
+{{end}}

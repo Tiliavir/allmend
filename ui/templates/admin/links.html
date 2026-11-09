@@ -1,0 +1,21 @@
+{{define "content"}}
+<div class="page-title"><h1>Links</h1><a class="button secondary" href="/verwaltung">Zurück</a></div>
+<div class="card">
+{{if .Data.Links}}<div class="table-wrap"><table>
+<thead><tr><th scope="col">Name</th><th scope="col">Adresse</th><th scope="col">Sichtbar</th><th scope="col">Reihenfolge</th><th scope="col"><span class="visually-hidden">Aktion</span></th></tr></thead>
+<tbody>
+{{range $i, $l := .Data.Links}}<tr>
+<td>{{$l.Name}}</td><td class="small">{{$l.URL}}</td><td>{{if $l.Public}}öffentlich{{else}}nach Anmeldung{{end}}</td>
+<td class="actions">
+<form method="post" action="/verwaltung/links/{{$l.ID}}/hoch"><button class="button secondary" type="submit" aria-label="{{$l.Name}} nach oben"{{if eq $i 0}} disabled{{end}}>↑</button></form>
+<form method="post" action="/verwaltung/links/{{$l.ID}}/runter"><button class="button secondary" type="submit" aria-label="{{$l.Name}} nach unten">↓</button></form>
+</td>
+<td><a href="/verwaltung/links/{{$l.ID}}">Bearbeiten</a></td>
+</tr>{{end}}
+</tbody></table></div>{{else}}<p class="muted">Noch keine Links.</p>{{end}}
+</div>
+<section class="card">
+<h2>Neuer Link</h2>
+{{template "linkform" .Data.New}}
+</section>
+{{end}}

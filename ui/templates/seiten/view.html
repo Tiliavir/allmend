@@ -1,0 +1,15 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title">
+<h1>{{$d.Page.Title}}</h1>
+<div class="actions">
+{{if $d.CanWrite}}<a class="button" href="/seiten/{{$d.Page.Slug}}/bearbeiten">Bearbeiten</a>{{end}}
+<a class="button secondary" href="/seiten/{{$d.Page.Slug}}/versionen">Versionen</a>
+{{if $d.CanManage}}<a class="button secondary" href="/seiten/{{$d.Page.Slug}}/rechte">Rechte</a>{{end}}
+</div>
+</div>
+<article class="card prose">
+{{$d.HTML}}
+</article>
+<p class="muted small">Version {{$d.Page.Version}} · geändert {{$d.Updated}}{{if $d.By}} von {{$d.By}}{{end}} · angelegt von {{$d.Owner}}</p>
+{{end}}

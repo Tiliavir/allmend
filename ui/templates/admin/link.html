@@ -1,0 +1,8 @@
+{{define "content"}}
+<div class="page-title"><h1>{{.Data.Link.Name}}</h1><a class="button secondary" href="/verwaltung/links">Zurück</a></div>
+<div class="card">{{template "linkform" .Data.Link}}</div>
+<section class="card">
+<h2>Löschen</h2>
+<form class="stack" method="post" action="/verwaltung/links/{{.Data.Link.ID}}/loeschen"><label class="check"><input type="checkbox" name="confirm" value="1" required>Ja, diesen Link löschen</label><div class="actions"><button class="button danger" type="submit">Link löschen</button></div></form>
+</section>
+{{end}}

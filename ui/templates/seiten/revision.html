@@ -1,0 +1,10 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>{{$d.Revision.Title}} <span class="muted">· Version {{$d.Revision.Version}}</span></h1>
+<div class="actions">
+{{if and $d.CanWrite (ne $d.Revision.Version $d.Page.Version)}}<form method="post" action="/seiten/{{$d.Page.Slug}}/versionen/{{$d.Revision.Version}}/wiederherstellen"><button class="button" type="submit">Diese Fassung wiederherstellen</button></form>{{end}}
+<a class="button secondary" href="/seiten/{{$d.Page.Slug}}/versionen">Alle Versionen</a>
+</div></div>
+<p class="muted small">Gespeichert {{$d.Updated}}{{if $d.By}} von {{$d.By}}{{end}}</p>
+<article class="card prose">{{$d.HTML}}</article>
+{{end}}

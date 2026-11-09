@@ -1,0 +1,18 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>Orte{{if not $d.Own}} <span class="muted">· {{$d.Person}}</span>{{end}}</h1><a class="button secondary" href="/orte/zeitachse?person={{$d.PersonID}}">Zeitachse</a></div>
+{{if gt (len $d.People) 1}}<form class="filters" method="get" action="/orte">
+<label>Person<select name="person">{{range $d.People}}<option value="{{.ID}}"{{if .Current}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+<button class="button secondary" type="submit">Anzeigen</button>
+</form>{{end}}
+{{if $d.Lists}}<div class="card"><ul class="list">
+{{range $d.Lists}}<li><a href="/orte/listen/{{.ID}}?person={{$d.PersonID}}">{{.Name}}</a><span class="muted small">{{if .DateFrom}}{{.DateFrom}}{{if .DateTo}} – {{.DateTo}}{{end}} · {{end}}{{.PlaceCount}} Orte</span></li>
+{{end}}</ul></div>{{else}}<p class="muted">Keine Reisen.</p>{{end}}
+{{if $d.Own}}<details class="card"><summary>Standortverlauf importieren</summary>
+<form class="stack" method="post" action="/orte/import" enctype="multipart/form-data">
+<p class="muted small">JSON aus Google Takeout (Standortverlauf, Feld <code>locations</code>). Punkte, die schon da sind, werden übersprungen. Ein fehlerhafter Eintrag bricht den ganzen Import ab.</p>
+<label>Datei<input type="file" name="datei" accept="application/json,.json" required></label>
+<div class="actions"><button class="button" type="submit">Importieren</button></div>
+</form></details>{{end}}
+<p class="muted small">Orte wird später grundlegend überarbeitet.</p>
+{{end}}

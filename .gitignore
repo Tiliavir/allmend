@@ -1,0 +1,5 @@
+/allmend
+/data/
+.dev.env
+.claude/settings.local.json
+/.cache/

@@ -1,0 +1,27 @@
+{{define "content"}}
+{{$d := .Data}}{{$x := $d.R}}{{$g := $d.Group}}
+<div class="page-title"><h1>{{.Title}}</h1><a class="button secondary" href="/ausgaben/{{$g.ID}}">Abbrechen</a></div>
+<p class="muted small">{{$g.Name}} · wird jeden Monat am selben Tag gebucht (in kürzeren Monaten am letzten Tag), sobald jemand die Gruppe öffnet.</p>
+<form class="stack" method="post" action="{{if $x.ID}}/ausgaben/{{$g.ID}}/wiederkehrend/{{$x.ID}}{{else}}/ausgaben/{{$g.ID}}/wiederkehrend{{end}}">
+{{if $x.ID}}<input type="hidden" name="version" value="{{$x.Version}}">{{end}}
+<label>Beschreibung<input type="text" name="description" maxlength="120" required value="{{$x.Description}}"></label>
+<div class="fields">
+<label>Nächste Buchung<input type="date" name="next" required value="{{$x.Next}}"></label>
+<label>Betrag<input type="text" name="amount" required inputmode="decimal" pattern="[0-9']+([.,][0-9]{1,2})?" value="{{$d.Amount}}"></label>
+<label>Währung<input type="text" name="currency" required pattern="[A-Z]{3}" maxlength="3" list="ag-currencies" value="{{$x.Currency}}"></label>
+</div>
+<datalist id="ag-currencies">{{range $d.Currencies}}<option value="{{.}}"></option>{{end}}</datalist>
+<label>Kategorie<input type="text" name="category" maxlength="60" list="ag-categories" value="{{$x.Category}}"></label>
+<datalist id="ag-categories">{{range $d.Categories}}<option value="{{.}}"></option>{{end}}</datalist>
+<label>Bezahlt von<select name="paid_by">{{range $d.People}}<option value="{{.ID}}"{{if eq .ID $x.PaidBy}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+{{template "agsplit" $d}}
+<div class="actions"><button class="button" type="submit">Speichern</button></div>
+</form>
+{{if $x.ID}}<details class="card"><summary>Beenden</summary>
+<form class="stack" method="post" action="/ausgaben/{{$g.ID}}/wiederkehrend/{{$x.ID}}/loeschen">
+<input type="hidden" name="version" value="{{$x.Version}}">
+<p class="muted small">Es wird nichts mehr gebucht. Bereits gebuchte Einträge bleiben.</p>
+<label class="check"><input type="checkbox" name="confirm" value="1" required>Ja, beenden</label>
+<div class="actions"><button class="button danger" type="submit">Beenden</button></div>
+</form></details>{{end}}
+{{end}}

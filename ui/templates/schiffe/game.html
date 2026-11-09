@@ -1,0 +1,43 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>Gegen {{$d.Opponent}}</h1><a class="button secondary" href="/schiffe/{{$d.Game.ID}}">Aktualisieren</a></div>
+<p class="muted" id="schiffe" data-events="/schiffe/{{$d.Game.ID}}/ereignisse" data-version="{{$d.Game.Version}}">{{$d.Variant.Name}} – {{$d.Variant.Rules}}{{if $d.Game.Touching}} Schiffe dürfen sich berühren.{{end}}{{if $d.Game.AutoWater}} Felder um versenkte Schiffe sind Wasser.{{end}}</p>
+{{if eq $d.Game.Status "aufstellung"}}
+{{if $d.Placed}}<p class="flash" role="status">Deine Flotte steht. Warte, bis {{$d.Opponent}} aufgestellt hat – die Seite aktualisiert sich von selbst.</p>
+{{else}}<div class="game">
+<section class="card" aria-labelledby="flotte">
+<h2 id="flotte">Deine Flotte</h2>
+{{template "sea" $d.Own}}
+<a class="button secondary" href="/schiffe/{{$d.Game.ID}}">Neu würfeln</a>
+</section>
+<section class="card" aria-labelledby="aufstellen">
+<h2 id="aufstellen">Aufstellen</h2>
+<p class="muted small">Startfeld ist das obere bzw. linke Ende. Ändere Felder nach Belieben oder würfle neu.</p>
+<form method="post" action="/schiffe/{{$d.Game.ID}}/aufstellung">
+<table class="fleet"><thead><tr><th scope="col">Schiff</th><th scope="col">Start</th><th scope="col">Richtung</th></tr></thead><tbody>
+{{range $i, $s := $d.Proposal}}<tr><th scope="row">{{$s.Name}} ({{$s.Size}})</th>
+<td><input type="text" name="start" value="{{$s.Start}}" required maxlength="3" pattern="[A-La-l][0-9]{1,2}" aria-label="{{$s.Name}} {{$i}} Startfeld"></td>
+<td><select name="richtung" aria-label="{{$s.Name}} {{$i}} Richtung"><option value="h"{{if $s.Horizontal}} selected{{end}}>waagerecht</option><option value="v"{{if not $s.Horizontal}} selected{{end}}>senkrecht</option></select></td></tr>
+{{end}}</tbody></table>
+<div class="actions"><button class="button" type="submit">So aufstellen</button></div>
+</form>
+</section>
+</div>{{end}}
+{{else}}
+<p class="turn" role="status">{{if eq $d.Game.Status "beendet"}}{{if $d.Won}}Gewonnen! 🎉{{else}}{{$d.Opponent}} hat gewonnen.{{end}}{{else if $d.MyTurn}}<b>Du bist am Zug</b>{{if $d.Salvo}} – wähle {{$d.Shots}} Felder.{{else}} – tippe auf ein Feld.{{end}}{{else}}{{$d.Opponent}} ist am Zug.{{end}}</p>
+<div class="game">
+<section class="card" aria-labelledby="ziel">
+<h2 id="ziel">Meer von {{$d.Opponent}}</h2>
+<form method="post" action="/schiffe/{{$d.Game.ID}}/schuss">
+{{template "target" dict "B" $d.Target "Salvo" $d.Salvo}}
+{{if and $d.MyTurn $d.Salvo}}<div class="actions" data-shots="{{$d.Shots}}"><button class="button" type="submit">Salve abfeuern</button></div>{{end}}
+</form>
+</section>
+<section class="card" aria-labelledby="eigen">
+<h2 id="eigen">Dein Meer</h2>
+{{template "sea" $d.Own}}
+{{if $d.LastShots}}<h3>Letzte Schüsse</h3><ul class="small">{{range $d.LastShots}}<li>{{.}}</li>{{end}}</ul>{{end}}
+</section>
+</div>
+{{end}}
+{{end}}

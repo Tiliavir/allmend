@@ -1,0 +1,8 @@
+{{define "content"}}
+<div class="page-title"><h1>Seiten</h1><a class="button" href="/seiten/neu">Neue Seite</a></div>
+{{if .Data.Pages}}<div class="card">
+<ul class="list">
+{{range .Data.Pages}}<li><a href="/seiten/{{.Page.Slug}}">{{.Page.Title}}</a><span class="muted small">{{.Updated}}{{if .By}} · {{.By}}{{end}}{{if not .Page.ReadAll}} · eingeschränkt{{end}}</span></li>
+{{end}}</ul>
+</div>{{else}}<p class="muted">Noch keine Seiten. Leg die erste an – zum Beispiel eine Einkaufsliste mit <code>- [ ] Milch</code>.</p>{{end}}
+{{end}}

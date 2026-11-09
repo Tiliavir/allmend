@@ -1,0 +1,7 @@
+{{define "content"}}
+<div class="page-title"><h1>Ziel {{.Data.MonthStr}} {{.Data.Year}}</h1><a class="button secondary" href="/velo?jahr={{.Data.Year}}">Abbrechen</a></div>
+<form class="stack" method="post" action="/velo/ziel/{{.Data.Year}}/{{.Data.Month}}">
+<label>Kilometer<input type="number" name="km" step="1" min="0" value="{{if .Data.Km}}{{.Data.Km}}{{end}}" inputmode="numeric"><span class="hint">Zählt alle Velos. Leer oder 0 entfernt das Ziel.</span></label>
+<div class="actions"><button class="button" type="submit">Speichern</button></div>
+</form>
+{{end}}

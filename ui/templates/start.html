@@ -1,0 +1,25 @@
+{{define "content"}}
+<div class="stack">
+<p class="eyebrow">{{.Data.Today}}</p>
+<h1>{{if .Account}}{{.Data.Greeting}}, {{.Account.DisplayName}}{{else}}Willkommen auf der Allmend{{end}}</h1>
+</div>
+{{if .Data.Links}}<section class="section" aria-labelledby="dienste">
+<h2 id="dienste">Dienste</h2>
+<div class="grid">
+{{range .Data.Links}}<a class="tile" href="{{.URL}}"><span class="chip">{{icon .Icon}}</span><span><b>{{.Name}}</b>{{if .Description}}<span class="desc">{{.Description}}</span>{{end}}</span></a>
+{{end}}</div>
+</section>{{end}}
+{{if .Data.Modules}}<section class="section" aria-labelledby="module">
+<h2 id="module">Module</h2>
+<div class="grid">
+{{range .Data.Modules}}<a class="module m-{{.ID}}" href="{{.Path}}"><span class="chip">{{icon .Icon}}</span><b>{{.Name}}</b></a>
+{{end}}</div>
+</section>{{end}}
+{{if .Data.Pages}}<section class="section m-seiten" aria-labelledby="seiten">
+<h2 id="seiten">Zuletzt geänderte Seiten</h2>
+<div class="card"><ul class="list">
+{{range .Data.Pages}}<li><a href="/seiten/{{.Slug}}">{{.Title}}</a></li>
+{{end}}</ul></div>
+</section>{{end}}
+{{if and (not .Account) (not .Data.Links)}}<p class="muted">Melde dich an, um die Allmend zu nutzen.</p>{{end}}
+{{end}}

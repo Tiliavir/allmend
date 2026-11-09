@@ -1,0 +1,26 @@
+{{define "content"}}
+{{$b := .Data.Bike}}
+<div class="page-title"><h1>{{if $b.ID}}{{$b.Name}} bearbeiten{{else}}Neues Velo{{end}}</h1><a class="button secondary" href="{{if $b.ID}}/velo/velos/{{$b.ID}}{{else}}/velo/velos{{end}}">Abbrechen</a></div>
+<form class="stack" method="post" action="{{if $b.ID}}/velo/velos/{{$b.ID}}{{else}}/velo/velos{{end}}">
+{{if $b.ID}}<input type="hidden" name="version" value="{{$b.Version}}">{{end}}
+<label>Name<input type="text" name="name" maxlength="60" required value="{{$b.Name}}"></label>
+<div class="fields">
+<label>Marke<input type="text" name="brand" maxlength="60" value="{{$b.Brand}}"></label>
+<label>Modell<input type="text" name="model" maxlength="60" value="{{$b.Model}}"></label>
+<label>Gekauft am<input type="date" name="acquired" value="{{$b.Acquired}}"></label>
+<label>Farbe<input type="color" name="color" value="{{if $b.Color}}{{$b.Color}}{{else}}#1f6feb{{end}}"></label>
+</div>
+<div class="fields">
+<label>Kaufpreis ({{.Data.Base}})<input type="text" name="purchase" inputmode="decimal" value="{{moneyInput $b.PurchaseCents}}"></label>
+<label>Zubehör ({{.Data.Base}})<input type="text" name="accessories" inputmode="decimal" value="{{moneyInput $b.AccessoriesCents}}"></label>
+</div>
+<label>Notizen<textarea name="notes" rows="3">{{$b.Notes}}</textarea></label>
+<div class="actions"><button class="button" type="submit">Speichern</button></div>
+</form>
+{{if $b.ID}}<details class="card"><summary>Velo löschen</summary>
+<form class="stack" method="post" action="/velo/velos/{{$b.ID}}/loeschen">
+<p class="muted small">Nur möglich, solange keine Touren oder Reparaturen daran hängen.</p>
+<label class="check"><input type="checkbox" name="confirm" value="1" required>Ja, {{$b.Name}} löschen</label>
+<div class="actions"><button class="button danger" type="submit">Löschen</button></div>
+</form></details>{{end}}
+{{end}}

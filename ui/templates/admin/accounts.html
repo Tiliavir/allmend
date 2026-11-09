@@ -1,0 +1,27 @@
+{{define "content"}}
+<div class="page-title"><h1>Konten</h1><a class="button secondary" href="/verwaltung">Zurück</a></div>
+<div class="card">
+<div class="table-wrap"><table>
+<thead><tr><th scope="col">Name</th><th scope="col">E-Mail</th><th scope="col">Status</th><th scope="col">Module</th><th scope="col"><span class="visually-hidden">Aktion</span></th></tr></thead>
+<tbody>
+{{range .Data.Accounts}}<tr>
+<td>{{.DisplayName}}{{if .IsAdmin}} <span class="badge">Admin</span>{{end}}</td>
+<td>{{.Email}}</td>
+<td>{{statusLabel .Status}}</td>
+<td>{{len .Modules}}</td>
+<td><a href="/verwaltung/konten/{{.ID}}">Bearbeiten</a></td>
+</tr>{{end}}
+</tbody></table></div>
+</div>
+<section class="card">
+<h2>Einladen</h2>
+<p class="muted small">Die Person meldet sich danach mit Google unter dieser Adresse an.</p>
+<form class="stack" method="post" action="/verwaltung/konten">
+<label>E-Mail<input type="email" name="email" required></label>
+<label>Name<input type="text" name="name" maxlength="60"></label>
+{{template "modules" .Data}}
+<label class="check"><input type="checkbox" name="admin" value="1">Admin</label>
+<div class="actions"><button class="button" type="submit">Einladen</button></div>
+</form>
+</section>
+{{end}}

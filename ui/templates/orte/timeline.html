@@ -1,0 +1,16 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>Zeitachse{{if not $d.Own}} <span class="muted">· {{$d.Person}}</span>{{end}}</h1><a class="button secondary" href="/orte?person={{$d.PersonID}}">Reisen</a></div>
+{{if not $d.Days}}<p class="muted">Kein Standortverlauf vorhanden.</p>{{else}}
+<form class="filters" method="get" action="/orte/zeitachse">
+<input type="hidden" name="person" value="{{$d.PersonID}}">
+<label>Tag<input type="date" name="tag" value="{{$d.Day}}" min="{{index $d.Days 0}}" max="{{index $d.Days (sub (len $d.Days) 1)}}"></label>
+<button class="button secondary" type="submit">Anzeigen</button>
+{{if $d.Prev}}<a class="button secondary" href="/orte/zeitachse?person={{$d.PersonID}}&amp;tag={{$d.Prev}}">← {{$d.Prev}}</a>{{end}}
+{{if $d.Next}}<a class="button secondary" href="/orte/zeitachse?person={{$d.PersonID}}&amp;tag={{$d.Next}}">{{$d.Next}} →</a>{{end}}
+</form>
+<p class="muted small">{{$d.Visits}} Punkte am {{$d.Day}} (UTC).</p>
+<div class="card"><div class="map" id="karte" role="img" aria-label="Weg am {{$d.Day}}"></div></div>
+<script type="application/json" id="karte-daten">{{$d.Map}}</script>
+{{end}}
+{{end}}

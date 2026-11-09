@@ -1,0 +1,21 @@
+{{define "content"}}
+{{$d := .Data}}{{$b := $d.Bike}}
+<div class="page-title"><h1><span class="row">{{template "dot" $b.Color}}{{$b.Name}}</span></h1>
+<div class="actions"><a class="button secondary" href="/velo/velos/{{$b.ID}}/bearbeiten">Bearbeiten</a><a class="button" href="/velo/velos/{{$b.ID}}/reparaturen/neu">Reparatur erfassen</a></div></div>
+{{template "velonav" "bikes"}}
+<div class="stats">
+<div class="stat"><span class="label">Gefahren</span><span class="value">{{km $d.Km}} km</span><span class="muted small">{{$d.Tours}} Touren · <a href="/velo?velo={{$b.ID}}">Statistik</a></span></div>
+<div class="stat"><span class="label">Kaufpreis</span><span class="value">{{if $b.PurchaseCents}}{{money $b.PurchaseCents $d.Base}}{{else}}–{{end}}</span>{{if $b.Acquired}}<span class="muted small">seit {{day $b.Acquired}}</span>{{end}}</div>
+<div class="stat"><span class="label">Zubehör</span><span class="value">{{if $b.AccessoriesCents}}{{money $b.AccessoriesCents $d.Base}}{{else}}–{{end}}</span></div>
+<div class="stat"><span class="label">Reparaturen</span><span class="value">{{if $d.Costs}}{{money $d.Costs $d.Base}}{{else}}–{{end}}</span></div>
+</div>
+{{if $b.Brand}}<p class="muted">{{$b.Brand}} {{$b.Model}}</p>{{end}}
+{{if $b.Notes}}<p class="pre">{{$b.Notes}}</p>{{end}}
+<section class="card" aria-labelledby="rep">
+<h2 id="rep">Reparaturen</h2>
+{{if $d.Repairs}}<div class="table-wrap"><table>
+<thead><tr><th scope="col">Datum</th><th scope="col">Was</th><th scope="col" class="num">km-Stand</th><th scope="col" class="num">Kosten</th></tr></thead>
+<tbody>{{range $d.Repairs}}<tr><td>{{.Date}}</td><td><a href="/velo/reparaturen/{{.ID}}">{{.Title}}</a>{{if .Comment}}<br><span class="muted small">{{.Comment}}</span>{{end}}</td><td class="num">{{if .OdometerKm}}{{km (deref .OdometerKm)}}{{else}}–{{end}}</td><td class="num">{{money .CostCents $d.Base}}</td></tr>
+{{end}}</tbody></table></div>{{else}}<p class="muted">Keine Reparaturen.</p>{{end}}
+</section>
+{{end}}

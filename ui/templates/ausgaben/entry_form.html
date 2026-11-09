@@ -1,0 +1,36 @@
+{{define "content"}}
+{{$d := .Data}}{{$e := $d.E}}{{$g := $d.Group}}
+<div class="page-title"><h1>{{.Title}}</h1><a class="button secondary" href="/ausgaben/{{$g.ID}}">Abbrechen</a></div>
+<p class="muted small">{{$g.Name}}</p>
+<form class="stack" method="post" action="{{if $e.ID}}/ausgaben/{{$g.ID}}/eintraege/{{$e.ID}}{{else}}/ausgaben/{{$g.ID}}/eintraege{{end}}">
+<input type="hidden" name="art" value="{{$e.Kind}}">
+{{if $e.ID}}<input type="hidden" name="version" value="{{$e.Version}}">{{end}}
+<div class="fields">
+<label>Datum<input type="date" name="date" required value="{{$e.Date}}"></label>
+<label>Betrag<input type="text" name="amount" required inputmode="decimal" pattern="[0-9']+([.,][0-9]{1,2})?" value="{{$d.Amount}}"></label>
+<label>Währung<input type="text" name="currency" required pattern="[A-Z]{3}" maxlength="3" list="ag-currencies" value="{{$e.Currency}}"></label>
+</div>
+<datalist id="ag-currencies">{{range $d.Currencies}}<option value="{{.}}"></option>{{end}}</datalist>
+{{if eq $e.Kind "zahlung"}}
+<div class="fields">
+<label>Von<select name="paid_by">{{range $d.People}}<option value="{{.ID}}"{{if eq .ID $e.PaidBy}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+<label>An<select name="to" required><option value="">–</option>{{range $d.People}}<option value="{{.ID}}"{{if eq .ID $d.To}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+</div>
+<label>Notiz<input type="text" name="description" maxlength="120" value="{{$e.Description}}"></label>
+{{else}}
+<label>Beschreibung<input type="text" name="description" maxlength="120" required value="{{$e.Description}}"></label>
+<label>Kategorie<input type="text" name="category" maxlength="60" list="ag-categories" value="{{$e.Category}}"></label>
+<datalist id="ag-categories">{{range $d.Categories}}<option value="{{.}}"></option>{{end}}</datalist>
+{{if and $e.ID (not $e.PaidBy)}}<p class="muted small">Importiert ohne Aufteilung: Splitwise hat nicht exportiert, wer bezahlt hat. Beim Speichern wird sie so aufgeteilt, wie unten angegeben.</p>{{end}}
+<label>Bezahlt von<select name="paid_by">{{if not $e.PaidBy}}<option value="">–</option>{{end}}{{range $d.People}}<option value="{{.ID}}"{{if eq .ID $e.PaidBy}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+{{template "agsplit" $d}}
+{{end}}
+<div class="actions"><button class="button" type="submit">Speichern</button></div>
+</form>
+{{if $e.ID}}<details class="card"><summary>Eintrag löschen</summary>
+<form class="stack" method="post" action="/ausgaben/{{$g.ID}}/eintraege/{{$e.ID}}/loeschen">
+<input type="hidden" name="version" value="{{$e.Version}}">
+<label class="check"><input type="checkbox" name="confirm" value="1" required>Ja, diesen Eintrag löschen</label>
+<div class="actions"><button class="button danger" type="submit">Löschen</button></div>
+</form></details>{{end}}
+{{end}}

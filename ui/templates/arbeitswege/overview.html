@@ -1,0 +1,41 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title">
+<h1>Arbeitswege{{if not $d.Own}} <span class="muted">· {{$d.Person}}</span>{{end}}</h1>
+{{if $d.Own}}<div class="actions">
+{{if $d.View}}<a class="button secondary" href="/arbeitswege/{{$d.Selected}}/bearbeiten">Bearbeiten</a>{{end}}
+<a class="button" href="/arbeitswege/neu">Neues Jahr</a>
+</div>{{end}}
+</div>
+<form class="filters" method="get" action="/arbeitswege">
+{{if gt (len $d.People) 1}}<label>Person<select name="person">{{range $d.People}}<option value="{{.ID}}"{{if .Current}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>{{else}}<input type="hidden" name="person" value="{{$d.PersonID}}">{{end}}
+{{if $d.Years}}<label>Jahr<select name="jahr">{{range $d.Years}}<option value="{{.}}"{{if eq . $d.Selected}} selected{{end}}>{{.}}</option>{{end}}</select></label>{{end}}
+<button class="button secondary" type="submit">Anzeigen</button>
+</form>
+{{if not $d.View}}<p class="muted">Noch keine Jahre erfasst.{{if $d.Own}} <a href="/arbeitswege/neu">Erstes Jahr anlegen</a>.{{end}}</p>
+{{else}}{{with $d.View}}
+<div class="stats">
+<div class="stat"><span class="label">Pendlerpauschale</span><span class="value">{{eur .TotalPendlerCents}}</span></div>
+<div class="stat"><span class="label">Homeoffice</span><span class="value">{{pct .TotalHomeOfficePct}}</span></div>
+<div class="stat"><span class="label">km Velo</span><span class="value">{{num1 .TotalKmBike}}</span></div>
+<div class="stat"><span class="label">Kontrolle</span><span class="value">{{if .AllChecksOK}}stimmt{{else}}<span class="bad">prüfen</span>{{end}}</span></div>
+</div>
+<div class="card table-wrap">
+<table class="months">
+<thead><tr><th scope="col">{{.Year.Year}}</th>{{range $d.Months}}<th scope="col">{{.}}</th>{{end}}<th scope="col">Σ</th></tr></thead>
+<tbody>
+{{range $d.Rows}}<tr><th scope="row">{{.Label}}</th>{{range .Values}}<td>{{num .}}</td>{{end}}<td class="total">{{num .Total}}</td></tr>
+{{end}}
+<tr class="derived"><th scope="row">Homeoffice %</th>{{range .Derived}}<td>{{pct .HomeOfficePct}}</td>{{end}}<td class="total">{{pct .TotalHomeOfficePct}}</td></tr>
+<tr class="derived"><th scope="row">km Auto</th>{{range .Derived}}<td>{{if .KmCar}}{{num1 .KmCar}}{{else}}–{{end}}</td>{{end}}<td class="total">{{num1 .TotalKmCar}}</td></tr>
+<tr class="derived"><th scope="row">km Zug</th>{{range .Derived}}<td>{{if .KmTrain}}{{num1 .KmTrain}}{{else}}–{{end}}</td>{{end}}<td class="total">{{num1 .TotalKmTrain}}</td></tr>
+<tr class="derived"><th scope="row">km Velo</th>{{range .Derived}}<td>{{if .KmBike}}{{num1 .KmBike}}{{else}}–{{end}}</td>{{end}}<td class="total">{{num1 .TotalKmBike}}</td></tr>
+<tr class="derived"><th scope="row">Kontrolle</th>{{range .Derived}}<td>{{if .Check}}✓{{else}}<span class="bad" title="Erfasste Tage ≠ Arbeitstage">✗</span>{{end}}</td>{{end}}<td class="total">{{if .AllChecksOK}}✓{{else}}<span class="bad">✗</span>{{end}}</td></tr>
+<tr class="strong"><th scope="row">Pendlerpauschale</th>{{range .Derived}}<td>{{if .PendlerCents}}{{eur .PendlerCents}}{{else}}–{{end}}</td>{{end}}<td class="total">{{eur .TotalPendlerCents}}</td></tr>
+</tbody></table>
+</div>
+<p class="muted small">Einfache Entfernung: Auto {{num .CarDistKm}} km + Zug {{num .TrainDistKm}} km, Velo {{num .BikeDistKm}} km; km-Zeilen zählen Hin- und Rückweg.
+Pauschale auf volle km (einfach): Auto+Zug {{num .BaseCarTrainKm}} km, Velo {{num .BaseBikeKm}} km.
+Satz {{.Year.Year}}: {{if eq .RateLow .RateHigh}}{{num .RateLow}} ct/km ab dem ersten km{{else}}{{num .RateLow}} ct/km bis {{num .Threshold}} km, {{num .RateHigh}} ct/km darüber{{end}}, je Fahrttag.</p>
+{{end}}{{end}}
+{{end}}

@@ -1,0 +1,21 @@
+{{define "content"}}
+{{$t := .Data.Tour}}
+<div class="page-title"><h1>{{if $t.ID}}Tour bearbeiten{{else}}Neue Tour{{end}}</h1><a class="button secondary" href="/velo/touren">Abbrechen</a></div>
+<form class="stack" method="post" action="{{if $t.ID}}/velo/touren/{{$t.ID}}{{else}}/velo/touren{{end}}">
+{{if $t.ID}}<input type="hidden" name="version" value="{{$t.Version}}">{{end}}
+<div class="fields">
+<label>Datum<input type="date" name="date" required value="{{$t.Date}}"></label>
+<label>Distanz (km)<input type="number" name="km" step="0.1" min="0.1" max="2000" required value="{{if $t.DistanceKm}}{{$t.DistanceKm}}{{end}}" inputmode="decimal"></label>
+<label>Höhenmeter<input type="number" name="hm" step="1" min="0" max="50000" value="{{if $t.ElevationM}}{{$t.ElevationM}}{{end}}" inputmode="numeric"></label>
+</div>
+<label>Velo<select name="bike"><option value="">–</option>{{range .Data.Bikes}}<option value="{{.ID}}"{{if eq .ID $t.BikeID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+<label>Titel<input type="text" name="title" maxlength="120" value="{{$t.Title}}"></label>
+<label>Beschreibung<textarea name="description" rows="4">{{$t.Description}}</textarea></label>
+<div class="actions"><button class="button" type="submit">Speichern</button></div>
+</form>
+{{if $t.ID}}<details class="card"><summary>Tour löschen</summary>
+<form class="stack" method="post" action="/velo/touren/{{$t.ID}}/loeschen">
+<label class="check"><input type="checkbox" name="confirm" value="1" required>Ja, diese Tour löschen</label>
+<div class="actions"><button class="button danger" type="submit">Löschen</button></div>
+</form></details>{{end}}
+{{end}}

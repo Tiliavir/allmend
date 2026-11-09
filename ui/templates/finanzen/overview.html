@@ -1,0 +1,48 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>Finanzen</h1>
+<div class="actions"><a class="button secondary" href="/finanzen/wertpapiere/neu">Wertpapier</a><a class="button" href="/finanzen/anlagen/neu">Anlage erfassen</a></div></div>
+{{template "finnav" "overview"}}
+<div class="stats">
+<div class="stat"><span class="label">Vermögen</span><span class="value">{{money $d.TotalCents $d.Base}}</span>{{if $d.Missing}}<span class="small bad">unvollständig</span>{{end}}</div>
+<div class="stat"><span class="label">Gewinn</span><span class="value {{gaincls $d.GainCents}}">{{money $d.GainCents $d.Base}}</span><span class="muted small">ohne Konten und Vorsorge</span></div>
+<div class="stat"><span class="label">Nach Steuern</span><span class="value">{{money $d.GainAfterTaxCents $d.Base}}</span><span class="muted small">{{len $d.Positions}} Positionen</span></div>
+</div>
+{{if $d.Missing}}<div class="flash error" role="status"><p>Diese Werte fehlen und sind nicht in der Summe:</p><ul>{{range $d.Missing}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
+<section class="card" aria-labelledby="pos">
+<h2 id="pos">Vermögensübersicht</h2>
+{{if $d.Positions}}<div class="table-wrap"><table>
+<thead><tr><th scope="col">Bezeichnung</th><th scope="col">Art</th><th scope="col" class="num">Wert</th><th scope="col" class="num">in {{$d.Base}}</th><th scope="col" class="num">Kosten</th><th scope="col" class="num">Eingezahlt</th><th scope="col" class="num">Gewinn</th><th scope="col">Stand</th></tr></thead>
+<tbody>{{range $d.Positions}}<tr>
+<td>{{if .ID}}<a href="/finanzen/anlagen/{{.ID}}">{{.Name}}</a>{{else}}<a href="/finanzen/wertpapiere">{{.Name}}</a>{{end}}</td>
+<td>{{.KindLabel}}</td>
+<td class="num">{{money .ValueCents .Currency}}</td>
+<td class="num">{{if .HasBase}}{{money .BaseCents $d.Base}}{{else}}<span class="bad">Kurs fehlt</span>{{end}}</td>
+<td class="num">{{if .CostCents}}{{money .CostCents .Currency}}{{else}}–{{end}}</td>
+<td class="num">{{if .PaidInCents}}{{money .PaidInCents .Currency}}{{else}}–{{end}}</td>
+<td class="num {{if .CountsGain}}{{gaincls .GainCents}}{{else}}muted{{end}}">{{money .GainCents .Currency}}</td>
+<td>{{if .AsOf}}{{dateDE .AsOf}}{{end}}</td>
+</tr>
+{{end}}</tbody></table></div>{{else}}<p class="muted">Noch keine Anlagen. Lege Konten, Bausparverträge, Vorsorge und Sachwerte als Anlagen an; Wertpapiere erfasst du unter <a href="/finanzen/wertpapiere">Wertpapiere</a>.</p>{{end}}
+</section>
+{{if $d.Securities}}<section class="card" aria-labelledby="wp">
+<h2 id="wp">Wertpapiere</h2>
+<div class="table-wrap"><table>
+<thead><tr><th scope="col">Name</th><th scope="col" class="num">Bestand</th><th scope="col" class="num">Kurs</th><th scope="col" class="num">Wert</th><th scope="col" class="num">Dividenden</th><th scope="col" class="num">Gewinn</th></tr></thead>
+<tbody>{{range $d.Securities}}<tr>
+<td><a href="/finanzen/wertpapiere/{{.ID}}">{{.Name}}</a></td>
+<td class="num">{{qty .Held}}</td>
+<td class="num">{{if .HasPrice}}{{money .PriceCents .Currency}}{{else}}–{{end}}</td>
+<td class="num">{{if .HasPrice}}{{money .ValueCents .Currency}}{{else}}–{{end}}</td>
+<td class="num">{{if .DividendsCents}}{{money .DividendsCents .Currency}}{{else}}–{{end}}</td>
+<td class="num {{gaincls .GainCents}}">{{if .HasPrice}}{{money .GainCents .Currency}}{{else}}–{{end}}</td>
+</tr>
+{{end}}</tbody></table></div>
+</section>{{end}}
+<section class="card" aria-labelledby="kurse">
+<h2 id="kurse">Kurse</h2>
+{{if $d.Run}}<p class="small">Zuletzt geladen am {{$d.RunAge}}: {{if $d.Run.OK}}{{$d.Run.Message}}{{else}}<span class="bad">{{$d.Run.Message}}</span>{{end}}</p>
+{{else}}<p class="muted small">Noch nie geladen. Kurse und Wechselkurse werden jeden Tag um 05:00 geladen.</p>{{end}}
+{{if $d.CanFetch}}<form method="post" action="/finanzen/kurse"><button class="button secondary" type="submit">Kurse jetzt laden</button></form>{{end}}
+</section>
+{{end}}

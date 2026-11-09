@@ -1,0 +1,17 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>Ausgaben</h1></div>
+{{if $d.Groups}}<div class="card"><ul class="list">
+{{range $d.Groups}}<li><a href="/ausgaben/{{.ID}}">{{.Name}}</a><span class="muted small">{{.People}}</span></li>
+{{end}}</ul></div>{{else}}<p class="muted">Noch keine Gruppe. Eine Gruppe sind Leute, die Ausgaben miteinander teilen – zum Beispiel „Haushalt“ oder „Ferien“.</p>{{end}}
+<details class="card"{{if or (not $d.Groups) .Error}} open{{end}}><summary>Neue Gruppe</summary>
+<form class="stack" method="post" action="/ausgaben">
+<label>Name<input type="text" name="name" maxlength="60" required value="{{$d.Name}}"></label>
+{{if $d.Candidates}}<fieldset><legend>Mit wem?</legend>
+{{range $d.Candidates}}<label class="check"><input type="checkbox" name="person" value="{{.ID}}"{{if index $d.Chosen .ID}} checked{{end}}>{{.Name}}</label>
+{{end}}</fieldset>
+<p class="muted small">Du bist immer dabei. Die Personen lassen sich später nicht mehr ändern. Nur sie sehen die Gruppe.</p>
+<div class="actions"><button class="button" type="submit">Anlegen</button></div>
+{{else}}<p class="muted small">Niemand sonst hat Zugriff auf Ausgaben. Ein Admin kann ihn geben.</p>{{end}}
+</form></details>
+{{end}}

@@ -1,0 +1,43 @@
+{{define "modules"}}<fieldset><legend>Module</legend>
+{{$sel := .Selected}}{{range .AllModules}}<label class="check"><input type="checkbox" name="module" value="{{.ID}}"{{if index $sel .ID}} checked{{end}}>{{.Name}}{{if not .Ready}} <span class="badge">kommt noch</span>{{end}}</label>
+{{end}}</fieldset>{{end}}
+{{define "linkform"}}<form class="stack" method="post" action="{{if .ID}}/verwaltung/links/{{.ID}}{{else}}/verwaltung/links{{end}}">
+<label>Name<input type="text" name="name" maxlength="60" required value="{{.Name}}"></label>
+<label>Adresse<input type="url" name="url" required value="{{.URL}}" placeholder="https://"></label>
+<label>Beschreibung<input type="text" name="description" maxlength="120" value="{{.Description}}"></label>
+<label>Icon<select name="icon">{{$cur := .Icon}}{{range linkIcons}}<option value="{{.}}"{{if eq . $cur}} selected{{end}}>{{iconLabel .}}</option>{{end}}</select></label>
+<label class="check"><input type="checkbox" name="public" value="1"{{if .Public}} checked{{end}}>Öffentlich (auch ohne Anmeldung sichtbar)</label>
+<div class="actions"><button class="button" type="submit">Speichern</button></div>
+</form>{{end}}
+{{define "velonav"}}<nav class="subnav" aria-label="Velo">
+<a href="/velo"{{if eq . "overview"}} aria-current="page"{{end}}>Übersicht</a>
+<a href="/velo/touren"{{if eq . "tours"}} aria-current="page"{{end}}>Touren</a>
+<a href="/velo/velos"{{if eq . "bikes"}} aria-current="page"{{end}}>Velos</a>
+</nav>{{end}}
+{{define "dot"}}<svg class="dot" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="6" fill="{{if .}}{{.}}{{else}}currentColor{{end}}"/></svg>{{end}}
+{{define "sea"}}<table class="sea"><thead><tr><td></td>{{range .Cols}}<th scope="col">{{.}}</th>{{end}}</tr></thead><tbody>
+{{range .Rows}}<tr><th scope="row">{{.Label}}</th>{{range .Cells}}<td class="{{.Class}}" title="{{.Coord}}: {{.Label}}"></td>{{end}}</tr>
+{{end}}</tbody></table>{{end}}
+{{define "target"}}<table class="sea target"><thead><tr><td></td>{{range .B.Cols}}<th scope="col">{{.}}</th>{{end}}</tr></thead><tbody>
+{{$salvo := .Salvo}}{{range .B.Rows}}<tr><th scope="row">{{.Label}}</th>{{range .Cells}}<td class="{{.Class}}">{{if .Open}}{{if $salvo}}<input type="checkbox" name="c" value="{{.Coord}}" aria-label="{{.Coord}}">{{else}}<button type="submit" name="c" value="{{.Coord}}" aria-label="Auf {{.Coord}} schießen"></button>{{end}}{{else}}<span class="visually-hidden">{{.Coord}}: {{.Label}}</span>{{end}}</td>{{end}}</tr>
+{{end}}</tbody></table>{{end}}
+{{define "finnav"}}<nav class="subnav" aria-label="Finanzen">
+<a href="/finanzen"{{if eq . "overview"}} aria-current="page"{{end}}>Übersicht</a>
+<a href="/finanzen/wertpapiere"{{if eq . "securities"}} aria-current="page"{{end}}>Wertpapiere</a>
+<a href="/finanzen/entwicklung"{{if eq . "development"}} aria-current="page"{{end}}>Entwicklung</a>
+<a href="/finanzen/diversifikation"{{if eq . "diversification"}} aria-current="page"{{end}}>Diversifikation</a>
+<a href="/finanzen/verlauf"{{if eq . "years"}} aria-current="page"{{end}}>Verlauf</a>
+</nav>{{end}}
+{{define "shares"}}{{if .}}<ul class="shares">{{range .}}<li><span class="share-label">{{.Label}}</span><meter min="0" max="1" value="{{.Share}}">{{pct1 .Share}}</meter><span class="num">{{pct1 .Share}}</span></li>
+{{end}}</ul>{{else}}<p class="muted small">Keine Daten.</p>{{end}}{{end}}
+{{define "weights"}}{{if .}}<ul class="shares">{{range .}}<li><span class="share-label">{{.Label}}</span><meter min="0" max="1" value="{{.Weight}}">{{pct1 .Weight}}</meter><span class="num">{{pct1 .Weight}}</span></li>
+{{end}}</ul>{{else}}<p class="muted small">Keine Daten.</p>{{end}}{{end}}
+{{define "agsplit"}}{{$sp := .Split}}<fieldset><legend>Für wen</legend>
+<label class="check"><input type="radio" name="aufteilung" value="gleich"{{if eq $sp.Mode "gleich"}} checked{{end}}>Gleich aufteilen auf</label>
+<div class="ag-who">{{range .People}}<label class="check"><input type="checkbox" name="fuer" value="{{.ID}}"{{if index $sp.For .ID}} checked{{end}}>{{.Name}}</label>
+{{end}}</div>
+<label class="check"><input type="radio" name="aufteilung" value="betraege"{{if eq $sp.Mode "betraege"}} checked{{end}}>Feste Beträge</label>
+<div class="fields ag-who">{{range .People}}<label>Anteil {{.Name}}<input type="text" name="anteil_{{.ID}}" inputmode="decimal" pattern="[0-9']+([.,][0-9]{1,2})?" value="{{index $sp.Amounts .ID}}"></label>
+{{end}}</div>
+<p class="muted small">Bei „gleich“ bekommen Rundungsrappen zuerst die, die nicht bezahlt haben. Feste Beträge müssen den Betrag ergeben.</p>
+</fieldset>{{end}}

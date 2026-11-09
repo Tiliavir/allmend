@@ -1,0 +1,22 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>Schiffe versenken</h1></div>
+{{if $d.Games}}<div class="card"><ul class="list">
+{{range $d.Games}}<li><a href="/schiffe/{{.ID}}">gegen {{.Opponent}} · {{.Variant}}</a>
+<span class="small">{{if eq .Status "aufstellung"}}<span class="muted">Aufstellung</span>{{else if eq .Status "laeuft"}}{{if .MyTurn}}<b>Du bist am Zug</b>{{else}}<span class="muted">{{.Opponent}} ist am Zug</span>{{end}}{{else}}{{if .Won}}<b>Gewonnen</b>{{else}}<span class="muted">Verloren</span>{{end}}{{end}}</span></li>
+{{end}}</ul></div>{{else}}<p class="muted">Noch keine Spiele.</p>{{end}}
+<section class="card" aria-labelledby="neu">
+<h2 id="neu">Neues Spiel</h2>
+{{if $d.Opponents}}<form class="stack" method="post" action="/schiffe">
+<label>Gegen<select name="gegner" required><option value="">Bitte wählen</option>{{range $d.Opponents}}<option value="{{.ID}}">{{.DisplayName}}</option>{{end}}</select></label>
+<fieldset><legend>Variante</legend>
+{{range $i, $v := $d.Variants}}<label class="check"><input type="radio" name="variante" value="{{$v.ID}}"{{if eq $i 0}} checked{{end}} required><span><b>{{$v.Name}}</b> <span class="muted small">{{$v.Rules}}</span></span></label>
+{{end}}</fieldset>
+<fieldset><legend>Regeln</legend>
+<label class="check"><input type="checkbox" name="beruehren" value="1">Schiffe dürfen sich berühren</label>
+<label class="check"><input type="checkbox" name="wasser" value="1" checked>Felder um versenkte Schiffe sind automatisch Wasser</label>
+</fieldset>
+<div class="actions"><button class="button" type="submit">Herausfordern</button></div>
+</form>{{else}}<p class="muted">Niemand sonst hat Zugriff auf Schiffe versenken. Ein Admin kann ihn vergeben.</p>{{end}}
+</section>
+{{end}}

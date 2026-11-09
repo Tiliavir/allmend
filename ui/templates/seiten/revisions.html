@@ -1,0 +1,7 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>Versionen: {{$d.Page.Title}}</h1><a class="button secondary" href="/seiten/{{$d.Page.Slug}}">Zurück</a></div>
+<div class="card"><ul class="list">
+{{range $d.Revisions}}<li><a href="/seiten/{{$d.Page.Slug}}/versionen/{{.Rev.Version}}">Version {{.Rev.Version}}</a><span class="muted small">{{.When}}{{if .By}} · {{.By}}{{end}}{{if .Current}} · aktuell{{end}}</span></li>
+{{end}}</ul></div>
+{{end}}
