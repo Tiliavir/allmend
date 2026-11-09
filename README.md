@@ -22,3 +22,4 @@ Configuration, Google login setup and upgrades: [deployment](docs/arc42/07-deplo
 
 Go 1.26, `make check` (lint, tests, W3C validation; needs Java for the
 validator). Architecture and decisions: [docs/arc42](docs/arc42/).
+Releasing: [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
