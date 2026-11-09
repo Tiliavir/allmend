@@ -12,7 +12,7 @@ Status: Accepted
   reverse proxy.
 - Variants at start: Klassisch, Treffer-Serie, Salven-Modus, Großes Meer
   (12×12). Settings per game: ships may touch yes/no; mark cells around a sunk
-  ship as water yes/no. Seeminen later (#49).
+  ship as water yes/no. Seeminen later (#5).
 
 ## Why
 Polling every few seconds feels slow when players sit side by side (stated);

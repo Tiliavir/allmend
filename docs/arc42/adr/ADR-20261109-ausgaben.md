@@ -34,7 +34,7 @@ Status: Proposed
   or removing members, rows with several payers (refused on import).
 
 ## Why
-Issue #48: much simpler than Splitwise. The family uses two groups: a small
+Old issue "Ausgaben teilen": much simpler than Splitwise. The family uses two groups: a small
 set of recurring costs and one for everything else, entered by hand
 (stated). Members-only scope fits money shared between some
 of the family, not all of it. Validating the totals of the export makes the

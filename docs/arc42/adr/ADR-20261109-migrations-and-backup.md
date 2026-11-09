@@ -17,7 +17,7 @@ Status: Accepted
   Unexpected legacy data (invalid date, unknown reference, wrong type, foreign
   currency) stops the migration and names the rows; it is fixed in the old app
   and the start retried. Only documented defaults of the old app are applied.
-  The import is removed again in 2.1 (#53).
+  The import is removed again in 2.1 (#8).
 - `allmend migrate --dry-run --db <copy>` runs everything on a copy and prints
   record counts per table before and after.
 

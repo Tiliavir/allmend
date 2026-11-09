@@ -1,6 +1,6 @@
 // Package places holds an account's places, trips (lists of places) and GPS
 // visits imported from Google Location History ("Orte"). The owner writes;
-// everyone with module access may read. A fundamental rework is planned (#50).
+// everyone with module access may read. A fundamental rework is planned (#6).
 package places
 
 import (
