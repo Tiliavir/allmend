@@ -61,10 +61,11 @@ func (s *Service) load(ctx context.Context, owner string, withPrices bool) (*boo
 	if err != nil {
 		return nil, err
 	}
+	curs := map[string]bool{}
 	for _, d := range divs {
 		b.divs[d.SecurityID] = append(b.divs[d.SecurityID], d)
+		curs[d.Currency] = true
 	}
-	curs := map[string]bool{}
 	for _, a := range b.assets {
 		curs[a.Currency] = true
 	}
@@ -94,6 +95,25 @@ func (s *Service) load(ctx context.Context, owner string, withPrices bool) (*boo
 		}
 	}
 	return b, nil
+}
+
+// convert turns c minor units of from into to via the base currency.
+func (b *book) convert(c int64, from, to string) (int64, bool) {
+	if from == to {
+		return c, true
+	}
+	ff, ok := b.conv.Factor(from)
+	ft, ok2 := b.conv.Factor(to)
+	if !ok || !ok2 {
+		return 0, false
+	}
+	return int64(math.Round(float64(c) * ff / ft)), true
+}
+
+// dividend is d in the currency of sec; ok is false if no rate is known
+// (load reports the missing rate).
+func (b *book) dividend(d Dividend, sec Security) (int64, bool) {
+	return b.convert(d.AmountCents, d.Currency, sec.Currency)
 }
 
 func sortedKeys(m map[string]bool) []string {
@@ -150,7 +170,7 @@ type Summary struct {
 	PriceDate      string
 	HasPrice       bool
 	ValueCents     int64 // security currency
-	DividendsCents int64
+	DividendsCents int64 // security currency; without dividends lacking a rate
 	GainCents      int64 // value − cost + dividends (unrealised view)
 }
 
@@ -160,7 +180,9 @@ func (m Summary) GainAfterTaxCents() int64 { return AfterTax(m.GainCents) }
 func (b *book) summary(sec Security) Summary {
 	m := Summary{Security: sec, Holding: Apply(b.txs[sec.ID], "")}
 	for _, d := range b.divs[sec.ID] {
-		m.DividendsCents += d.AmountCents
+		if c, ok := b.dividend(d, sec); ok {
+			m.DividendsCents += c
+		}
 	}
 	if p, ok := Latest(b.prices[sec.Symbol]); ok && sec.Symbol != "" {
 		m.HasPrice, m.PriceDate = true, p.Date
@@ -250,13 +272,13 @@ func (s *Service) Securities(ctx context.Context, a account.Account, archived bo
 
 // ── security detail ───────────────────────────────────
 
-// DividendRow is a dividend with its per-unit amount.
+// DividendRow is a dividend with its per-unit amount (in its currency).
 type DividendRow struct {
 	Dividend
 	PerUnitCents int64 // 0 if nothing was held
 }
 
-// YearAmount is a sum per calendar year.
+// YearAmount is a sum per calendar year (in the security's currency).
 type YearAmount struct {
 	Year  int
 	Cents int64
@@ -273,6 +295,7 @@ type Detail struct {
 	RiskDerived     bool
 	Composition     map[string][]Weight
 	Prices          []Price
+	Missing         []string // missing exchange rates (dividends left out of sums)
 }
 
 // Security builds the detail page of one of a's securities.
@@ -290,7 +313,7 @@ func (s *Service) Security(ctx context.Context, a account.Account, secID string)
 			return Detail{}, err
 		}
 	}
-	d := Detail{Summary: b.summary(sec), Prices: b.prices[sec.Symbol]}
+	d := Detail{Summary: b.summary(sec), Prices: b.prices[sec.Symbol], Missing: b.miss}
 	d.UnrealizedCents = d.ValueCents - d.CostCents
 	txs := b.txs[sec.ID]
 	for i := len(txs) - 1; i >= 0; i-- {
@@ -305,8 +328,10 @@ func (s *Service) Security(ctx context.Context, a account.Account, secID string)
 			row.PerUnitCents = int64(math.Round(float64(dv.AmountCents) / held))
 		}
 		d.Dividends = append(d.Dividends, row)
-		y, _ := strconv.Atoi(dv.Date[:4])
-		years[y] += dv.AmountCents
+		if c, ok := b.dividend(dv, sec); ok {
+			y, _ := strconv.Atoi(dv.Date[:4])
+			years[y] += c
+		}
 	}
 	for y, c := range years {
 		d.DividendYears = append(d.DividendYears, YearAmount{y, c})
@@ -559,7 +584,9 @@ func (s *Service) Development(ctx context.Context, a account.Account, f Filter) 
 		var divSum int64
 		for i, date := range dev.Dates {
 			for di < len(divs) && divs[di].Date <= date {
-				divSum += divs[di].AmountCents
+				if c, ok := b.dividend(divs[di], p.sec); ok {
+					divSum += c
+				}
 				di++
 			}
 			price, ok := PriceAt(ps, date)
@@ -787,4 +814,64 @@ func (s *Service) SaveYear(ctx context.Context, a account.Account, y Year) (Year
 	want := y.Version
 	y.Version = want + 1
 	return y, s.Repo.UpdateYear(ctx, y, want)
+}
+
+// ── years ─────────────────────────────────────────────
+
+// YearsView is the yearly history. Each year is shown in its own currency;
+// the chart needs one unit: the common currency of all years, or else the
+// base currency at today's rate (no history is stored).
+type YearsView struct {
+	Years     []Year // ascending
+	Unit      string
+	Converted bool
+	Chart     []Year   // amounts in Unit; years without a rate are left out
+	Missing   []string // German
+}
+
+// Years builds the yearly history of a.
+func (s *Service) Years(ctx context.Context, a account.Account) (YearsView, error) {
+	ys, err := s.Repo.Years(ctx, a.ID)
+	if err != nil {
+		return YearsView{}, err
+	}
+	v := YearsView{Years: ys, Unit: s.Base}
+	curs := map[string]bool{}
+	for _, y := range ys {
+		curs[y.Currency] = true
+	}
+	if len(curs) == 1 {
+		v.Unit = ys[0].Currency
+		v.Chart = ys
+		return v, nil
+	}
+	v.Converted = len(curs) > 1
+	conv := Converter{Base: s.Base, Rates: map[string]Rate{}}
+	for _, c := range sortedKeys(curs) {
+		if c == s.Base {
+			continue
+		}
+		r, err := s.Market.Rate(ctx, c, s.Base)
+		switch {
+		case errors.Is(err, ErrNotFound):
+			v.Missing = append(v.Missing, "Kein Wechselkurs "+c+" → "+s.Base)
+		case err != nil:
+			return YearsView{}, err
+		default:
+			conv.Rates[c] = r
+		}
+	}
+	for _, y := range ys {
+		f, ok := conv.Factor(y.Currency)
+		if !ok {
+			continue
+		}
+		x := y
+		x.Currency = s.Base
+		for _, c := range []*int64{&x.IncomeCents, &x.TaxCents, &x.PensionCents, &x.CashCents, &x.BausparCents, &x.StocksCents, &x.FundsCents, &x.RealEstateCents} {
+			*c = int64(math.Round(float64(*c) * f))
+		}
+		v.Chart = append(v.Chart, x)
+	}
+	return v, nil
 }

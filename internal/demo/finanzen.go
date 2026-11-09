@@ -84,8 +84,8 @@ func (s *seeder) finanzen(f *family) error {
 	}
 	for y := 2; y >= 0; y-- {
 		for _, dv := range []finanzen.Dividend{
-			{SecurityID: secs[0].ID, Date: s.today.AddDate(-y, -2, 0).Format(time.DateOnly), AmountCents: int64(6000 + (2-y)*3500)},
-			{SecurityID: secs[2].ID, Date: s.today.AddDate(-y, -6, 0).Format(time.DateOnly), AmountCents: int64(9600 + (2-y)*800)},
+			{SecurityID: secs[0].ID, Date: s.today.AddDate(-y, -2, 0).Format(time.DateOnly), Currency: secs[0].Currency, AmountCents: int64(6000 + (2-y)*3500)},
+			{SecurityID: secs[2].ID, Date: s.today.AddDate(-y, -6, 0).Format(time.DateOnly), Currency: secs[2].Currency, AmountCents: int64(9600 + (2-y)*800)},
 		} {
 			if _, err := fin.SaveDividend(s.ctx, f.anna, dv); err != nil {
 				return err
@@ -97,7 +97,7 @@ func (s *seeder) finanzen(f *family) error {
 	}
 	for i, y := 0, s.today.Year()-5; y < s.today.Year(); i, y = i+1, y+1 {
 		k := int64(i)
-		yr := finanzen.Year{Year: y, IncomeCents: (7_800_000 + k*300_000), TaxCents: (1_560_000 + k*60_000), PensionCents: 2_000_000 + k*400_000,
+		yr := finanzen.Year{Year: y, Currency: "EUR", IncomeCents: (7_800_000 + k*300_000), TaxCents: (1_560_000 + k*60_000), PensionCents: 2_000_000 + k*400_000,
 			CashCents: 2_800_000 + k*100_000, BausparCents: 900_000 + k*130_000, StocksCents: 300_000 + k*250_000, FundsCents: 800_000 + k*600_000}
 		if i == 3 {
 			yr.Comment = "Bausparvertrag aufgestockt, Sparplan auf " + strconv.Itoa(4) + " Anteile im Monat erhöht."

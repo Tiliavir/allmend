@@ -5,8 +5,10 @@
 {{if $v.ID}}<input type="hidden" name="version" value="{{$v.Version}}">{{end}}
 <div class="fields">
 <label>Datum<input type="date" name="date" required value="{{$v.Date}}"></label>
-<label>Betrag brutto ({{$s.Currency}})<input type="text" name="amount" inputmode="decimal" required value="{{moneyInput $v.AmountCents}}"></label>
+<label>Betrag brutto<input type="text" name="amount" inputmode="decimal" required value="{{moneyInput $v.AmountCents}}"></label>
+<label>Währung<input type="text" name="currency" maxlength="3" minlength="3" pattern="[A-Za-z]{3}" required value="{{$v.Currency}}"></label>
 </div>
+<p class="hint">Die Währung, in der die Dividende ausbezahlt wurde; das Wertpapier handelt in {{$s.Currency}}.</p>
 <div class="actions"><button class="button" type="submit">Speichern</button></div>
 </form>
 {{if $v.ID}}<details class="card"><summary>Dividende löschen</summary>

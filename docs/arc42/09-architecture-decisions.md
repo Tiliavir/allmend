@@ -14,6 +14,7 @@
 | [Schiffe versenken with Server-Sent Events](adr/ADR-20261109-battleship-sse.md) | Accepted |
 | [Finance prices fetched once a day](adr/ADR-20261109-finance-daily-prices.md) | Accepted |
 | [Velo scope](adr/ADR-20261109-velo-scope.md) | Accepted |
+| [Currencies in finance, untimed tracks, corrected 0.1.0 steps](adr/ADR-20261109-finance-currencies.md) | Accepted |
 | [Configuration via environment, dependency set](adr/ADR-20261109-config-and-dependencies.md) | Accepted |
 | [Public demo as a static export on GitHub Pages](adr/ADR-20261109-demo-pages.md) | Proposed |
 | [Ausgaben (shared expenses, Splitwise replacement)](adr/ADR-20261109-ausgaben.md) | Proposed |

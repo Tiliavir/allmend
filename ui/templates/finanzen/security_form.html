@@ -19,6 +19,7 @@
 <p class="hint">Eine Zeile pro Eintrag: <code>Bezeichnung = Prozent</code>, z. B. <code>Technologie = 30</code>. Liefert Alpha Vantage einen Bereich, ersetzt er den manuellen.</p>
 <div class="fields">{{range $d.Dims}}<label>{{.Label}}<textarea name="w_{{.ID}}" rows="4">{{index $d.Weights .ID}}</textarea></label>{{end}}</div>
 </fieldset>
+<label>Notizen (Markdown)<textarea name="notes" rows="4">{{$s.Notes}}</textarea></label>
 <div class="actions"><button class="button" type="submit">Speichern</button></div>
 </form>
 {{end}}

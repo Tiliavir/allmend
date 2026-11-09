@@ -43,15 +43,20 @@ CREATE TABLE place_visits (
 	place_id    TEXT REFERENCES places(id),
 	latitude    REAL NOT NULL CHECK (latitude BETWEEN -90 AND 90),
 	longitude   REAL NOT NULL CHECK (longitude BETWEEN -180 AND 180),
-	at          TEXT NOT NULL CHECK (julianday(at) IS NOT NULL),
+	at          TEXT CHECK (at IS NULL OR julianday(at) IS NOT NULL),
+	seq         INTEGER CHECK (seq >= 0),
 	source_file TEXT NOT NULL DEFAULT '',
-	UNIQUE (owner_id, source_file, at)
+	CHECK ((at IS NULL) != (seq IS NULL)),
+	UNIQUE (owner_id, source_file, at),
+	UNIQUE (owner_id, source_file, seq)
 ) STRICT;
 CREATE INDEX place_visits_owner_at ON place_visits(owner_id, at);
 `
 
 // v6 creates the Orte tables and imports places, lists, list membership and
 // visits. Unexpected legacy data stops the migration and names the rows.
+// Points of KMZ lines had no time in the old app; their timestamp is
+// "line:" plus the eight-digit position in the track, kept as seq.
 func v6(ctx context.Context, tx db.Tx, env db.MigrationEnv) error {
 	if _, err := tx.ExecContext(ctx, v6Schema); err != nil {
 		return err
@@ -76,6 +81,7 @@ func v6(ctx context.Context, tx db.Tx, env db.MigrationEnv) error {
 	txt := func(f string) string { return "COALESCE(CAST(" + j(f) + " AS TEXT), '')" }
 	num := func(f string) string { return "json_type(data, '$." + f + "') IN ('integer', 'real')" }
 	coords := "NOT " + num("latitude") + " OR NOT " + num("longitude") + " OR abs(" + j("latitude") + ") > 90 OR abs(" + j("longitude") + ") > 180"
+	line := "COALESCE(" + j("timestamp") + " GLOB 'line:[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]', 0)"
 	optDate := func(f string) string {
 		return "(" + txt(f) + " != '' AND date(" + txt(f) + ") IS NOT " + txt(f) + ")"
 	}
@@ -90,9 +96,11 @@ SELECT id, ?1, ` + txt("name") + `, ` + txt("description") + `, ` + j("latitude"
 SELECT id, ?1, ` + txt("name") + `, ` + txt("description") + `, ` + txt("date_from") + `, ` + txt("date_to") + `, ` + txt("source_file") + `, created_at, updated_at FROM legacy.place_lists`},
 		{"place_list_places", "unknown list or place", j("place_list_id") + " NOT IN (SELECT id FROM place_lists) OR " + j("place_id") + " NOT IN (SELECT id FROM places) OR " + j("place_list_id") + " IS NULL OR " + j("place_id") + " IS NULL",
 			`INSERT INTO place_list_places (list_id, place_id) SELECT ` + j("place_list_id") + `, ` + j("place_id") + ` FROM legacy.place_list_places`},
-		{"place_visits", "coordinates or timestamp invalid, or unknown place", coords + " OR julianday(" + j("timestamp") + ") IS NULL OR (" + txt("place_id") + " != '' AND " + j("place_id") + " NOT IN (SELECT id FROM places))",
-			`INSERT INTO place_visits (id, owner_id, place_id, latitude, longitude, at, source_file)
-SELECT id, ?1, NULLIF(` + txt("place_id") + `, ''), ` + j("latitude") + `, ` + j("longitude") + `, strftime('%Y-%m-%dT%H:%M:%fZ', ` + j("timestamp") + `), ` + txt("source_file") + ` FROM legacy.place_visits`},
+		{"place_visits", "coordinates or timestamp invalid, or unknown place", coords + " OR (julianday(" + j("timestamp") + ") IS NULL AND NOT (" + line + ")) OR (" + txt("place_id") + " != '' AND " + j("place_id") + " NOT IN (SELECT id FROM places))",
+			`INSERT INTO place_visits (id, owner_id, place_id, latitude, longitude, at, seq, source_file)
+SELECT id, ?1, NULLIF(` + txt("place_id") + `, ''), ` + j("latitude") + `, ` + j("longitude") + `,
+	CASE WHEN ` + line + ` THEN NULL ELSE strftime('%Y-%m-%dT%H:%M:%fZ', ` + j("timestamp") + `) END,
+	CASE WHEN ` + line + ` THEN CAST(substr(` + j("timestamp") + `, 6) AS INTEGER) END, ` + txt("source_file") + ` FROM legacy.place_visits`},
 	}
 	for _, st := range steps {
 		if !has[st.table] {

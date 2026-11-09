@@ -272,6 +272,7 @@ type finDetailData struct {
 	Chart    map[string]any
 	Dims     any
 	TaxLabel string
+	Notes    any // rendered Markdown
 }
 
 func (s *Server) finSecurity(w http.ResponseWriter, r *http.Request, a account.Account) {
@@ -281,6 +282,14 @@ func (s *Server) finSecurity(w http.ResponseWriter, r *http.Request, a account.A
 		return
 	}
 	data := finDetailData{Detail: d, Dims: finanzen.Dimensions, TaxLabel: strconv.Itoa(finanzen.TaxPercent) + " %"}
+	if d.Notes != "" {
+		res, err := markdown.Render(d.Notes, markdown.Tasks{})
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		data.Notes = res.HTML
+	}
 	charts := len(d.Prices) > 1
 	if charts {
 		labels := make([]string, len(d.Prices))
@@ -329,7 +338,8 @@ func (s *Server) finSecurityEdit(w http.ResponseWriter, r *http.Request, a accou
 func (s *Server) finSecuritySave(w http.ResponseWriter, r *http.Request, a account.Account) {
 	f := &formReader{r: r}
 	sec := finanzen.Security{ID: r.PathValue("id"), Name: f.text("name"), ISIN: strings.ToUpper(f.text("isin")), Ticker: f.text("ticker"),
-		Kind: f.text("kind"), Currency: strings.ToUpper(f.text("currency")), Symbol: f.text("symbol"), Version: f.version()}
+		Kind: f.text("kind"), Currency: strings.ToUpper(f.text("currency")), Symbol: f.text("symbol"),
+		Notes: strings.ReplaceAll(f.text("notes"), "\r\n", "\n"), Version: f.version()}
 	if v := f.text("risk"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
@@ -550,7 +560,12 @@ func (s *Server) finDivForm(w http.ResponseWriter, r *http.Request, a account.Ac
 }
 
 func (s *Server) finDivNew(w http.ResponseWriter, r *http.Request, a account.Account) {
-	s.finDivForm(w, r, a, http.StatusOK, finanzen.Dividend{SecurityID: r.PathValue("id"), Date: s.today()}, "")
+	sec, err := s.Finanzen.Repo.Security(r.Context(), a.ID, r.PathValue("id"))
+	if err != nil {
+		s.finErr(w, r, err)
+		return
+	}
+	s.finDivForm(w, r, a, http.StatusOK, finanzen.Dividend{SecurityID: sec.ID, Date: s.today(), Currency: sec.Currency}, "")
 }
 
 func (s *Server) finDivEdit(w http.ResponseWriter, r *http.Request, a account.Account) {
@@ -564,7 +579,8 @@ func (s *Server) finDivEdit(w http.ResponseWriter, r *http.Request, a account.Ac
 
 func (s *Server) finDivSave(w http.ResponseWriter, r *http.Request, a account.Account) {
 	f := &formReader{r: r}
-	d := finanzen.Dividend{ID: r.PathValue("did"), SecurityID: r.PathValue("id"), Date: f.text("date"), Version: f.version()}
+	d := finanzen.Dividend{ID: r.PathValue("did"), SecurityID: r.PathValue("id"), Date: f.text("date"),
+		Currency: strings.ToUpper(f.text("currency")), Version: f.version()}
 	if d.ID != "" {
 		old, err := s.Finanzen.Repo.Dividend(r.Context(), a.ID, d.ID)
 		if err != nil {
@@ -735,20 +751,23 @@ type finYearRow struct {
 }
 
 type finYearsData struct {
-	Years []finYearRow
-	Chart map[string]any
-	Base  string
-	Year  finanzen.Year
+	Years     []finYearRow
+	Chart     map[string]any
+	Unit      string
+	Converted bool
+	Missing   []string
+	Year      finanzen.Year
 }
 
 func (s *Server) finYears(w http.ResponseWriter, r *http.Request, a account.Account) {
-	ys, err := s.Finanzen.Repo.Years(r.Context(), a.ID)
+	v, err := s.Finanzen.Years(r.Context(), a)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	d := finYearsData{Base: s.BaseCurrency}
-	labels := make([]string, len(ys))
+	ys := v.Years
+	d := finYearsData{Unit: v.Unit, Converted: v.Converted, Missing: v.Missing}
+	labels := make([]string, len(v.Chart))
 	cats := []struct {
 		label string
 		get   func(finanzen.Year) int64
@@ -763,7 +782,7 @@ func (s *Server) finYears(w http.ResponseWriter, r *http.Request, a account.Acco
 	series := make([]map[string]any, len(cats))
 	vals := make([][]float64, len(cats))
 	for i := range cats {
-		vals[i] = make([]float64, len(ys))
+		vals[i] = make([]float64, len(v.Chart))
 	}
 	for i := len(ys) - 1; i >= 0; i-- {
 		y := ys[i]
@@ -778,7 +797,7 @@ func (s *Server) finYears(w http.ResponseWriter, r *http.Request, a account.Acco
 		}
 		d.Years = append(d.Years, row)
 	}
-	for i, y := range ys {
+	for i, y := range v.Chart {
 		labels[i] = strconv.Itoa(y.Year)
 		for c, cat := range cats {
 			vals[c][i] = float64(cat.get(y)) / 100
@@ -787,10 +806,10 @@ func (s *Server) finYears(w http.ResponseWriter, r *http.Request, a account.Acco
 	for c, cat := range cats {
 		series[c] = map[string]any{"label": cat.label, "data": vals[c]}
 	}
-	if len(ys) > 0 {
-		d.Chart = map[string]any{"type": "bar", "labels": labels, "unit": s.BaseCurrency, "stacked": true, "series": series}
+	if len(v.Chart) > 0 {
+		d.Chart = map[string]any{"type": "bar", "labels": labels, "unit": v.Unit, "stacked": true, "series": series}
 	}
-	s.finPage(w, r, http.StatusOK, "years", "Verlauf", "", d, len(ys) > 0)
+	s.finPage(w, r, http.StatusOK, "years", "Verlauf", "", d, d.Chart != nil)
 }
 
 func (s *Server) finYearForm(w http.ResponseWriter, r *http.Request, status int, y finanzen.Year, errMsg string) {
@@ -798,11 +817,21 @@ func (s *Server) finYearForm(w http.ResponseWriter, r *http.Request, status int,
 	if y.Version > 0 {
 		title = "Jahr " + strconv.Itoa(y.Year)
 	}
-	s.finPage(w, r, status, "year_form", title, errMsg, finYearsData{Year: y, Base: s.BaseCurrency}, false)
+	s.finPage(w, r, status, "year_form", title, errMsg, finYearsData{Year: y}, false)
 }
 
-func (s *Server) finYearNew(w http.ResponseWriter, r *http.Request, _ account.Account) {
-	s.finYearForm(w, r, http.StatusOK, finanzen.Year{Year: time.Now().In(s.Location).Year() - 1}, "")
+// finYearNew proposes last year in the currency of the newest recorded year.
+func (s *Server) finYearNew(w http.ResponseWriter, r *http.Request, a account.Account) {
+	ys, err := s.Finanzen.Repo.Years(r.Context(), a.ID)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	y := finanzen.Year{Year: time.Now().In(s.Location).Year() - 1, Currency: s.BaseCurrency}
+	if len(ys) > 0 {
+		y.Currency = ys[len(ys)-1].Currency
+	}
+	s.finYearForm(w, r, http.StatusOK, y, "")
 }
 
 func pathYear(r *http.Request) (int, bool) {
@@ -827,7 +856,7 @@ func (s *Server) finYearEdit(w http.ResponseWriter, r *http.Request, a account.A
 
 func (s *Server) finYearSave(w http.ResponseWriter, r *http.Request, a account.Account) {
 	f := &formReader{r: r}
-	y := finanzen.Year{Comment: strings.ReplaceAll(f.text("comment"), "\r\n", "\n"), Version: f.version()}
+	y := finanzen.Year{Currency: strings.ToUpper(f.text("currency")), Comment: strings.ReplaceAll(f.text("comment"), "\r\n", "\n"), Version: f.version()}
 	if r.PathValue("jahr") != "" {
 		n, ok := pathYear(r)
 		if !ok {

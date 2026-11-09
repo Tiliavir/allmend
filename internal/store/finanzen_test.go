@@ -55,11 +55,13 @@ INSERT INTO fin_accounts VALUES ('a1', '{"id":"a1","name":"Giro","currency":"EUR
 INSERT INTO fin_bauspar VALUES ('b1', '{"id":"b1","name":"LBS","currency":"EUR","value_minor":500000,"maturity_date":"2030-01-01","paid_in_minor":450000,"paid_in_currency":"EUR"}', 2, ` + ts0 + `);
 INSERT INTO fin_pensions VALUES ('p1', '{"id":"p1","name":"3a","currency":"CHF","value_minor":2000000}', 2, ` + ts0 + `);
 INSERT INTO fin_assets VALUES ('m1', '{"id":"m1","name":"Reka","category":"Reka","currency":"CHF","value_minor":30000}', 2, ` + ts0 + `);
-INSERT INTO fin_securities VALUES ('s1', '{"id":"s1","name":"Welt","isin":"IE00BK5BQT80","kind":"etf","currency":"EUR","price_connector_id":"stock-prices-live","price_symbol":"VWCE.DEX","archived":false,"risk_override":0,"composition_json":"{\"Sectors\":[{\"Label\":\"Tech\",\"Weight\":0.3}],\"Countries\":[],\"Currencies\":[],\"TopHoldings\":[]}"}', 2, ` + ts0 + `);
+INSERT INTO fin_securities VALUES ('s1', '{"id":"s1","name":"Welt","isin":"IE00BK5BQT80","kind":"etf","currency":"EUR","price_connector_id":"stock-prices-live","price_symbol":"VWCE.DEX","archived":false,"risk_override":0,"composition_json":"{\"_source\":\"justetf\",\"_note\":\"HQ in Israel\",\"Sectors\":[{\"Label\":\"Tech\",\"Weight\":0.3}],\"Countries\":[],\"Currencies\":[],\"TopHoldings\":[]}"}', 2, ` + ts0 + `);
 INSERT INTO fin_securities VALUES ('s2', '{"id":"s2","name":"Alt","kind":"stock","currency":"USD","archived":true,"archived_at":"2024-06-01"}', 2, ` + ts0 + `);
 INSERT INTO fin_transactions VALUES ('t1', '{"id":"t1","security_id":"s1","date":"2024-01-02","type":"buy","quantity":10.5,"currency":"EUR","price_per_unit_minor":10000,"fees_minor":500,"taxes_minor":0}', 1, ` + ts0 + `);
 INSERT INTO fin_transactions VALUES ('t2', '{"id":"t2","security_id":"s1","date":"2024-03-02","type":"sell","quantity":10.5,"currency":"EUR","price_per_unit_minor":11000,"fees_minor":0,"taxes_minor":0}', 1, ` + ts0 + `);
 INSERT INTO fin_dividends VALUES ('d1', '{"id":"d1","security_id":"s1","date":"2024-02-01","amount_minor":1230,"currency":"EUR"}', 1, ` + ts0 + `);
+INSERT INTO fin_dividends VALUES ('d2', '{"id":"d2","security_id":"s2","date":"2023-06-15","amount_minor":791,"currency":"CHF"}', 1, ` + ts0 + `);
+INSERT INTO fin_annual VALUES ('y0', '{"id":"y0","year":2023,"cash_minor":100,"cash_currency":"CHF","bauspar_minor":5,"bauspar_currency":"CHF"}', 2, ` + ts0 + `);
 INSERT INTO fin_annual VALUES ('y1', '{"id":"y1","year":2024,"income_minor":9000000,"income_currency":"EUR","cash_minor":100,"cash_currency":"EUR"}', 2, ` + ts0 + `);
 INSERT INTO fin_annual_comments VALUES ('c1', '{"id":"c1","year":"2024","comment":"Gutes Jahr"}', 1, ` + ts0 + `);
 INSERT INTO cache_stock_prices_live VALUES ('VWCE.DEX', '2024-01-02', 100.5, 'x'), ('VWCE.DEX', 'latest', 101, 'x');
@@ -83,15 +85,20 @@ func TestFinanzenLegacyImport(t *testing.T) {
 		t.Fatalf("assets %+v", as)
 	}
 	secs, _ := f.Securities(ctx, a.ID)
-	if len(secs) != 2 || !secs[0].Archived || secs[1].Symbol != "VWCE.DEX" || len(secs[1].Weights) != 1 || secs[1].Weights[0].Weight != 0.3 {
+	if len(secs) != 2 || !secs[0].Archived || secs[1].Symbol != "VWCE.DEX" || len(secs[1].Weights) != 1 || secs[1].Weights[0].Weight != 0.3 ||
+		secs[1].Notes != "Quelle der Zusammensetzung: justetf\n\nHQ in Israel" || secs[0].Notes != "" {
 		t.Fatalf("securities %+v", secs)
+	}
+	divs, _ := f.Dividends(ctx, a.ID)
+	if len(divs) != 2 || divs[0].Currency != "CHF" || divs[1].Currency != "EUR" {
+		t.Fatalf("dividends %+v", divs)
 	}
 	txs, _ := f.Transactions(ctx, a.ID)
 	if len(txs) != 2 || txs[0].Quantity != 10.5 {
 		t.Fatalf("transactions %+v", txs)
 	}
 	ys, _ := f.Years(ctx, a.ID)
-	if len(ys) != 1 || ys[0].Comment != "Gutes Jahr" || ys[0].IncomeCents != 9000000 {
+	if len(ys) != 2 || ys[0].Currency != "CHF" || ys[0].BausparCents != 5 || ys[1].Currency != "EUR" || ys[1].Comment != "Gutes Jahr" || ys[1].IncomeCents != 9000000 {
 		t.Fatalf("years %+v", ys)
 	}
 	ps, _ := f.Prices(ctx, "VWCE.DEX")
@@ -116,7 +123,9 @@ func TestFinanzenLegacyRejectsUnexpected(t *testing.T) {
 		"short sell":        `INSERT INTO fin_securities VALUES ('s1', '{"id":"s1","name":"X","kind":"etf","currency":"EUR"}', 1, ` + ts0 + `); INSERT INTO fin_transactions VALUES ('t9', '{"id":"t9","security_id":"s1","date":"2024-01-02","type":"sell","quantity":1,"price_per_unit_minor":1}', 1, ` + ts0 + `);`,
 		"tx currency":       `INSERT INTO fin_securities VALUES ('s1', '{"id":"s1","name":"X","kind":"etf","currency":"EUR"}', 1, ` + ts0 + `); INSERT INTO fin_transactions VALUES ('t9', '{"id":"t9","security_id":"s1","date":"2024-01-02","type":"buy","quantity":1,"currency":"USD","price_per_unit_minor":1}', 1, ` + ts0 + `);`,
 		"zero dividend":     `INSERT INTO fin_securities VALUES ('s1', '{"id":"s1","name":"X","kind":"etf","currency":"EUR"}', 1, ` + ts0 + `); INSERT INTO fin_dividends VALUES ('d9', '{"id":"d9","security_id":"s1","date":"2024-01-02","amount_minor":0}', 1, ` + ts0 + `);`,
-		"annual chf":        `INSERT INTO fin_annual VALUES ('y9', '{"id":"y9","year":2024,"cash_minor":1,"cash_currency":"CHF"}', 1, ` + ts0 + `);`,
+		"annual mixed":      `INSERT INTO fin_annual VALUES ('y9', '{"id":"y9","year":2024,"cash_minor":1,"cash_currency":"CHF","income_minor":1,"income_currency":"EUR"}', 1, ` + ts0 + `);`,
+		"composition key":   `INSERT INTO fin_securities VALUES ('s9', '{"id":"s9","name":"X","kind":"etf","currency":"EUR","composition_json":"{\"_comment\":\"x\"}"}', 1, ` + ts0 + `);`,
+		"bad div currency":  `INSERT INTO fin_securities VALUES ('s1', '{"id":"s1","name":"X","kind":"etf","currency":"EUR"}', 1, ` + ts0 + `); INSERT INTO fin_dividends VALUES ('d9', '{"id":"d9","security_id":"s1","date":"2024-01-02","amount_minor":1,"currency":"chf"}', 1, ` + ts0 + `);`,
 		"orphan comment":    `INSERT INTO fin_annual_comments VALUES ('c9', '{"id":"c9","year":"2019","comment":"x"}', 1, ` + ts0 + `);`,
 		"bad cached price9": `INSERT INTO fin_accounts VALUES ('a1', '{"id":"a1","name":"G","currency":"EUR"}', 1, ` + ts0 + `); INSERT INTO cache_stock_prices_live VALUES ('X9', '2024-01-02', -1, 'x');`,
 	}

@@ -1,10 +1,11 @@
 {{define "content"}}
-{{$y := .Data.Year}}{{$b := .Data.Base}}
+{{$y := .Data.Year}}
 <div class="page-title"><h1>{{if $y.Version}}Jahr {{$y.Year}}{{else}}Neues Jahr{{end}}</h1><a class="button secondary" href="/finanzen/verlauf">Abbrechen</a></div>
 <form class="stack" method="post" action="{{if $y.Version}}/finanzen/verlauf/{{$y.Year}}{{else}}/finanzen/verlauf{{end}}">
 {{if $y.Version}}<input type="hidden" name="version" value="{{$y.Version}}">{{else}}
 <div class="fields"><label>Jahr<input type="number" name="year" min="1900" max="2200" required value="{{$y.Year}}"></label></div>{{end}}
-<p class="hint">Alle Beträge in {{$b}}, Stand Jahresende.</p>
+<div class="fields"><label>Währung<input type="text" name="currency" maxlength="3" minlength="3" pattern="[A-Za-z]{3}" required value="{{$y.Currency}}"></label></div>
+<p class="hint">Alle Beträge in dieser Währung, Stand Jahresende.</p>
 <div class="fields">
 <label>Einkommen brutto<input type="text" name="income" inputmode="decimal" value="{{moneyInput $y.IncomeCents}}"></label>
 <label>Steuern<input type="text" name="tax" inputmode="decimal" value="{{moneyInput $y.TaxCents}}"></label>
