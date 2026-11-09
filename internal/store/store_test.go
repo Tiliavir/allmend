@@ -481,6 +481,15 @@ INSERT INTO place_visits VALUES ('v3', '{"latitude":46.1,"longitude":7.8,"timest
 	if err != nil || n != 0 {
 		t.Errorf("duplicate visit: %d %v", n, err)
 	}
+	// An existing id at another time is an error, not skipped.
+	if _, err := s.Places().InsertVisits(ctx, []places.Visit{{ID: "x", OwnerID: admin.ID, Latitude: 47.5, Longitude: 7.6, Timestamp: vs[0].Timestamp.Add(time.Hour), SourceFile: "trip.json"},
+		{ID: "x", OwnerID: admin.ID, Latitude: 47.5, Longitude: 7.6, Timestamp: vs[0].Timestamp.Add(2 * time.Hour), SourceFile: "trip.json"}}); err == nil {
+		t.Error("duplicate id accepted")
+	}
+	// A point without a time only comes from the legacy import.
+	if _, err := s.Places().InsertVisits(ctx, []places.Visit{{ID: "y", OwnerID: admin.ID, Latitude: 47.5, Longitude: 7.6, SourceFile: "weg.kmz"}}); err == nil {
+		t.Error("untimed visit accepted")
+	}
 }
 
 func TestPlacesLegacyRejectsUnexpected(t *testing.T) {

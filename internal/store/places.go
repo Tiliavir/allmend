@@ -132,8 +132,15 @@ func (r *Places) VisitDays(ctx context.Context, owner string) ([]string, error) 
 	return out, rows.Err()
 }
 
-// InsertVisits adds visits in one transaction, skipping existing ones.
+// InsertVisits adds timed visits in one transaction, skipping ones that exist
+// (same source and time). Points without a time come only from the legacy
+// import, so a visit without one is an error here.
 func (r *Places) InsertVisits(ctx context.Context, vs []places.Visit) (int, error) {
+	for _, v := range vs {
+		if v.Timestamp.IsZero() {
+			return 0, fmt.Errorf("store.Places.InsertVisits: visit %s has no time", v.ID)
+		}
+	}
 	tx, err := r.s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -141,14 +148,8 @@ func (r *Places) InsertVisits(ctx context.Context, vs []places.Visit) (int, erro
 	defer func() { _ = tx.Rollback() }()
 	n := 0
 	for _, v := range vs {
-		var at, seq any
-		if v.Timestamp.IsZero() {
-			seq = v.Seq
-		} else {
-			at = v.Timestamp.UTC().Format(visitTime)
-		}
-		res, err := tx.ExecContext(ctx, `INSERT INTO place_visits (id, owner_id, place_id, latitude, longitude, at, seq, source_file) VALUES (?,?,?,?,?,?,?,?)
-ON CONFLICT DO NOTHING`, v.ID, v.OwnerID, nullStr(v.PlaceID), v.Latitude, v.Longitude, at, seq, v.SourceFile)
+		res, err := tx.ExecContext(ctx, `INSERT INTO place_visits (id, owner_id, place_id, latitude, longitude, at, source_file) VALUES (?,?,?,?,?,?,?)
+ON CONFLICT (owner_id, source_file, at) DO NOTHING`, v.ID, v.OwnerID, nullStr(v.PlaceID), v.Latitude, v.Longitude, v.Timestamp.UTC().Format(visitTime), v.SourceFile)
 		if err != nil {
 			return 0, fmt.Errorf("store.Places.InsertVisits: %w", err)
 		}

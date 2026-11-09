@@ -52,7 +52,8 @@ type Repository interface {
 	VisitsBySource(ctx context.Context, owner, source string) ([]Visit, error)
 	VisitDays(ctx context.Context, owner string) ([]string, error) // YYYY-MM-DD (UTC), ascending
 	VisitsOn(ctx context.Context, owner string, from, to time.Time) ([]Visit, error)
-	// InsertVisits adds visits, skipping ones that exist (same source and time or track position); returns the number added.
+	// InsertVisits adds timed visits, skipping ones that exist (same source and time); returns the number added.
+	// A visit without a time is an error (untimed points come only from the legacy import).
 	InsertVisits(ctx context.Context, vs []Visit) (int, error)
 }
 
