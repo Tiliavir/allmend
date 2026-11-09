@@ -3,7 +3,8 @@
 <div class="page-title"><h1>{{if $d.Page.ID}}{{$d.Page.Title}} bearbeiten{{else}}Neue Seite{{end}}</h1>
 <a class="button secondary" href="{{if $d.Page.ID}}/seiten/{{$d.Page.Slug}}{{else}}/seiten{{end}}">Abbrechen</a></div>
 <form class="stack wide" method="post" action="{{if $d.Page.ID}}/seiten/{{$d.Page.Slug}}/bearbeiten{{else}}/seiten{{end}}">
-{{if $d.Page.ID}}<input type="hidden" name="base" value="{{$d.Base}}">{{end}}
+{{if $d.Page.ID}}<input type="hidden" name="base" value="{{$d.Base}}">{{else}}<input type="hidden" name="parent" value="{{with $d.Parent}}{{.ID}}{{end}}">
+{{with $d.Parent}}{{if .Title}}<p class="muted">Wird eine Unterseite von „{{.Title}}“.</p>{{end}}{{end}}{{end}}
 <label>Titel<input type="text" name="title" maxlength="120" required value="{{$d.Title}}"></label>
 <label>Text<textarea name="body" rows="22" spellcheck="true">{{$d.Body}}</textarea>
 <span class="hint">Markdown: <code># Titel</code>, <code>**fett**</code>, <code>- [ ] Aufgabe</code>, Tabellen, <code>```mermaid</code> für Diagramme.</span></label>

@@ -4,6 +4,19 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [Unreleased]
+
+### Added
+
+- Seiten: pages form a tree. Create a subpage from a page, see the path and
+  the subpages on it, and arrange the tree in the list by drag and drop
+  (mouse, or press and hold on touch). Without JavaScript, "Verschieben" on
+  a page does the same. Existing pages stay on the top level, sorted by title.
+
+### Changed
+
+- Deleting a page moves its subpages up to its parent.
+
 ## [0.2.2] - 2026-11-09
 
 ### Security

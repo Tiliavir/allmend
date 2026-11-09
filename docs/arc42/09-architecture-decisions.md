@@ -10,6 +10,7 @@
 | [Access per module, data scope per module](adr/ADR-20261109-access-and-data-scope.md) | Accepted |
 | [Start page and links](adr/ADR-20261109-start-page.md) | Accepted |
 | [Pages (mini wiki)](adr/ADR-20261109-pages.md) | Accepted |
+| [Page tree](adr/ADR-20261109-page-tree.md) | Proposed |
 | [Frontend: HTML and CSS first](adr/ADR-20261109-frontend.md) | Accepted |
 | [Schiffe versenken with Server-Sent Events](adr/ADR-20261109-battleship-sse.md) | Accepted |
 | [Finance prices fetched once a day](adr/ADR-20261109-finance-daily-prices.md) | Accepted |

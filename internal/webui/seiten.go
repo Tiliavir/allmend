@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/tiliavir/allmend/internal/account"
@@ -31,6 +32,8 @@ func (s *Server) seitenRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /seiten/{slug}/versionen/{v}", m(s.seitenRevision))
 	mux.Handle("POST /seiten/{slug}/versionen/{v}/wiederherstellen", m(s.seitenRestore))
 	mux.Handle("POST /seiten/{slug}/loeschen", m(s.seitenDelete))
+	mux.Handle("GET /seiten/{slug}/verschieben", m(s.seitenMove))
+	mux.Handle("POST /seiten/{slug}/verschieben", m(s.seitenMoveSave))
 }
 
 type seiteRow struct {
@@ -39,8 +42,20 @@ type seiteRow struct {
 	By      string
 }
 
+// treeRow is a page in the tree on the list.
+type treeRow struct {
+	seiteRow
+	Movable  bool
+	Children []treeRow
+}
+
 type seitenData struct {
+	Tree      []treeRow
 	Pages     []seiteRow
+	Parent    *pages.Page  // new page: the page it goes below
+	Ancestors []pages.Page // view: breadcrumbs
+	Children  []pages.Page // view: pages directly below
+	Slots     []slotGroup  // move form
 	Page      pages.Page
 	HTML      template.HTML
 	Updated   string
@@ -94,7 +109,7 @@ func (s *Server) pageError(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 func (s *Server) seitenList(w http.ResponseWriter, r *http.Request, a account.Account) {
-	ps, err := s.Pages.Readable(r.Context(), a)
+	nodes, err := s.Pages.Tree(r.Context(), a)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -104,22 +119,55 @@ func (s *Server) seitenList(w http.ResponseWriter, r *http.Request, a account.Ac
 		s.fail(w, r, err)
 		return
 	}
-	d := seitenData{}
-	for _, p := range ps {
-		d.Pages = append(d.Pages, seiteRow{p, s.when(p.UpdatedAt), names[p.UpdatedBy]})
+	var rows func([]pages.Node) []treeRow
+	rows = func(ns []pages.Node) []treeRow {
+		var out []treeRow
+		for _, n := range ns {
+			p := n.Page
+			out = append(out, treeRow{seiteRow{p, s.when(p.UpdatedAt), names[p.UpdatedBy]}, p.CanWrite(a), rows(n.Children)})
+		}
+		return out
 	}
-	s.render(w, r, http.StatusOK, "seiten/list", Page{Title: "Seiten", Module: account.Seiten, Data: d})
+	pg := Page{Title: "Seiten", Module: account.Seiten, Data: seitenData{Tree: rows(nodes)}}
+	if len(nodes) > 0 {
+		pg.Scripts = []Script{{Src: "/static/seiten-baum.js", Module: true}}
+	}
+	s.render(w, r, http.StatusOK, "seiten/list", pg)
 }
 
-func (s *Server) seitenNew(w http.ResponseWriter, r *http.Request, _ account.Account) {
-	s.render(w, r, http.StatusOK, "seiten/edit", Page{Title: "Neue Seite", Module: account.Seiten, Data: seitenData{}})
+func (s *Server) seitenNew(w http.ResponseWriter, r *http.Request, a account.Account) {
+	d := seitenData{}
+	if slug := r.URL.Query().Get("unter"); slug != "" {
+		p, err := s.Pages.Get(r.Context(), a, slug)
+		if err != nil {
+			s.pageError(w, r, err)
+			return
+		}
+		d.Parent = &p
+	}
+	s.render(w, r, http.StatusOK, "seiten/edit", Page{Title: "Neue Seite", Module: account.Seiten, Data: d})
 }
 
 func (s *Server) seitenCreate(w http.ResponseWriter, r *http.Request, a account.Account) {
-	p, err := s.Pages.Create(r.Context(), a, r.PostFormValue("title"), r.PostFormValue("body"))
+	parent := r.PostFormValue("parent")
+	if !pageID(parent) {
+		s.status(w, r, http.StatusBadRequest)
+		return
+	}
+	p, err := s.Pages.Create(r.Context(), a, parent, r.PostFormValue("title"), r.PostFormValue("body"))
 	if errors.Is(err, pages.ErrInvalid) {
+		d := seitenData{Title: r.PostFormValue("title"), Body: r.PostFormValue("body")}
+		if parent != "" {
+			d.Parent = &pages.Page{ID: parent}
+		}
 		s.render(w, r, http.StatusUnprocessableEntity, "seiten/edit", Page{Title: "Neue Seite", Module: account.Seiten,
-			Error: invalidPage, Data: seitenData{Title: r.PostFormValue("title"), Body: r.PostFormValue("body")}})
+			Error: invalidPage, Data: d})
+		return
+	}
+	if errors.Is(err, pages.ErrPlace) {
+		s.render(w, r, http.StatusUnprocessableEntity, "seiten/edit", Page{Title: "Neue Seite", Module: account.Seiten,
+			Error: "Die übergeordnete Seite gibt es nicht mehr. Die neue Seite kommt nach oben, wenn du nochmals speicherst.",
+			Data:  seitenData{Title: r.PostFormValue("title"), Body: r.PostFormValue("body")}})
 		return
 	}
 	if err != nil {
@@ -151,8 +199,18 @@ func (s *Server) seitenView(w http.ResponseWriter, r *http.Request, a account.Ac
 		s.fail(w, r, err)
 		return
 	}
+	up, err := s.Pages.Ancestors(r.Context(), a, p)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	down, err := s.Pages.Children(r.Context(), a, p)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
 	pg := Page{Title: p.Title, Module: account.Seiten, Data: seitenData{
-		Page: p, HTML: res.HTML, Updated: s.when(p.UpdatedAt), By: names[p.UpdatedBy], Owner: names[p.OwnerID],
+		Page: p, HTML: res.HTML, Ancestors: up, Children: down, Updated: s.when(p.UpdatedAt), By: names[p.UpdatedBy], Owner: names[p.OwnerID],
 		CanWrite: p.CanWrite(a), CanManage: p.CanManage(a),
 	}}
 	if res.HasMermaid {
@@ -378,4 +436,113 @@ func (s *Server) seitenDelete(w http.ResponseWriter, r *http.Request, a account.
 		return
 	}
 	s.redirect(w, r, "/seiten", "Seite gelöscht.")
+}
+
+// pageID reports whether v is empty or looks like a page id (32 hex digits).
+func pageID(v string) bool {
+	if v == "" {
+		return true
+	}
+	if len(v) != 32 {
+		return false
+	}
+	for _, c := range v {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// slotGroup lists the places below one parent where a page can go.
+type slotGroup struct {
+	Label string
+	Slots []slot
+}
+
+type slot struct {
+	Value, Label string
+	Selected     bool
+}
+
+// moveSlots lists every place the page p can be moved to: before each
+// sibling and last, at the top level and below every page outside p's own
+// subtree. The current place is selected.
+func moveSlots(nodes []pages.Node, p pages.Page) []slotGroup {
+	var out []slotGroup
+	var walk func(parent, label string, ns []pages.Node)
+	walk = func(parent, label string, ns []pages.Node) {
+		g := slotGroup{Label: label}
+		here := false // p comes right before the next slot
+		for _, n := range ns {
+			switch {
+			case n.Page.ID == p.ID:
+				here = p.ParentID == parent
+			case n.Page.ParentID == parent: // not a page whose parent is hidden
+				g.Slots = append(g.Slots, slot{parent + "/" + n.Page.ID, "vor „" + n.Page.Title + "“", here})
+				here = false
+			}
+		}
+		last := "als letzte"
+		if len(g.Slots) == 0 {
+			last = "hierhin"
+		}
+		g.Slots = append(g.Slots, slot{parent + "/", last, here})
+		out = append(out, g)
+		for _, n := range ns {
+			if n.Page.ID == p.ID {
+				continue
+			}
+			path := n.Page.Title
+			if parent != "" {
+				path = strings.TrimSuffix(strings.TrimPrefix(label, "Unter „"), "“") + " › " + n.Page.Title
+			}
+			walk(n.Page.ID, "Unter „"+path+"“", n.Children)
+		}
+	}
+	walk("", "Oberste Ebene", nodes)
+	return out
+}
+
+func (s *Server) seitenMove(w http.ResponseWriter, r *http.Request, a account.Account) {
+	p, err := s.Pages.Get(r.Context(), a, r.PathValue("slug"))
+	if err != nil {
+		s.pageError(w, r, err)
+		return
+	}
+	if !p.CanWrite(a) {
+		s.status(w, r, http.StatusForbidden)
+		return
+	}
+	nodes, err := s.Pages.Tree(r.Context(), a)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.render(w, r, http.StatusOK, "seiten/move", Page{Title: "Verschieben: " + p.Title, Module: account.Seiten,
+		Data: seitenData{Page: p, Slots: moveSlots(nodes, p)}})
+}
+
+func (s *Server) seitenMoveSave(w http.ResponseWriter, r *http.Request, a account.Account) {
+	slug := r.PathValue("slug")
+	parent, before, ok := strings.Cut(r.PostFormValue("ziel"), "/")
+	back := r.PostFormValue("zurueck")
+	if !ok || !pageID(parent) || !pageID(before) || (back != "liste" && back != "seite") {
+		s.status(w, r, http.StatusBadRequest)
+		return
+	}
+	p, err := s.Pages.Move(r.Context(), a, slug, parent, before)
+	switch {
+	case errors.Is(err, pages.ErrPlace):
+		s.redirect(w, r, "/seiten", "Dorthin lässt sich die Seite nicht verschieben – die Liste hat sich vielleicht inzwischen geändert.")
+		return
+	case err != nil:
+		s.pageError(w, r, err)
+		return
+	}
+	if back == "liste" {
+		s.redirect(w, r, "/seiten#seite-"+p.ID, "")
+		return
+	}
+	s.redirect(w, r, "/seiten/"+p.Slug, "Verschoben.")
 }

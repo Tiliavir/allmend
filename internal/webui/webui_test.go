@@ -370,6 +370,8 @@ func TestPagesRender(t *testing.T) {
 		"seite-edit":      {admin, "/seiten/netzwerk/bearbeiten", 200},
 		"seite-rechte":    {admin, "/seiten/netzwerk/rechte", 200},
 		"seite-versionen": {admin, "/seiten/netzwerk/versionen", 200},
+		"seite-unter":     {admin, "/seiten/neu?unter=netzwerk", 200},
+		"seite-move":      {admin, "/seiten/netzwerk/verschieben", 200},
 		"seite-version":   {admin, "/seiten/netzwerk/versionen/1", 200},
 	}
 	pages["velo-tour"] = pageCase{admin, "/velo/touren/" + tours[0].ID, 200}
@@ -486,6 +488,62 @@ func TestSeiten(t *testing.T) {
 	e.post(kim, "/seiten/einkauf/loeschen", url.Values{"confirm": {"1"}})
 	if r, _ := e.get(kim, "/seiten/einkauf"); r.StatusCode != http.StatusNotFound {
 		t.Errorf("deleted page: %d", r.StatusCode)
+	}
+}
+
+func TestPageTreeMove(t *testing.T) {
+	e := newEnv(t)
+	admin := e.loginAdmin()
+	ctx := context.Background()
+	e.post(admin, "/seiten", url.Values{"title": {"Haus"}, "body": {"x"}})
+	haus, _ := e.st.Pages().BySlug(ctx, "haus")
+	if r := e.post(admin, "/seiten", url.Values{"title": {"Heizung"}, "body": {"y"}, "parent": {haus.ID}}); r.Header.Get("Location") != "/seiten/heizung" {
+		t.Fatalf("create below: %d %s", r.StatusCode, r.Header.Get("Location"))
+	}
+	e.post(admin, "/seiten", url.Values{"title": {"Garten"}, "body": {"z"}})
+	heiz, _ := e.st.Pages().BySlug(ctx, "heizung")
+	garten, _ := e.st.Pages().BySlug(ctx, "garten")
+	if heiz.ParentID != haus.ID {
+		t.Fatalf("parent: %q", heiz.ParentID)
+	}
+	_, body := e.get(admin, "/seiten")
+	if !strings.Contains(body, `data-parent="`+haus.ID+`"`) || !strings.Contains(body, "seiten-baum.js") {
+		t.Error("tree list or script missing")
+	}
+	if _, body := e.get(admin, "/seiten/heizung"); !strings.Contains(body, `href="/seiten/haus"`) {
+		t.Error("breadcrumb missing")
+	}
+	// Move Garten before Haus (top level), then Heizung below Garten.
+	if r := e.post(admin, "/seiten/garten/verschieben", url.Values{"ziel": {"/" + haus.ID}, "zurueck": {"liste"}}); r.StatusCode != http.StatusSeeOther || r.Header.Get("Location") != "/seiten#seite-"+garten.ID {
+		t.Fatalf("move: %d %s", r.StatusCode, r.Header.Get("Location"))
+	}
+	if r := e.post(admin, "/seiten/heizung/verschieben", url.Values{"ziel": {garten.ID + "/"}, "zurueck": {"seite"}}); r.Header.Get("Location") != "/seiten/heizung" {
+		t.Fatalf("reparent: %d %s", r.StatusCode, r.Header.Get("Location"))
+	}
+	heiz, _ = e.st.Pages().BySlug(ctx, "heizung")
+	if heiz.ParentID != garten.ID {
+		t.Fatalf("parent after move: %q", heiz.ParentID)
+	}
+	// Bad input is an error, a loop is refused without changing anything.
+	for name, v := range map[string]url.Values{
+		"no separator": {"ziel": {"abc"}, "zurueck": {"liste"}},
+		"bad id":       {"ziel": {"XYZ/"}, "zurueck": {"liste"}},
+		"bad return":   {"ziel": {"/"}, "zurueck": {"anderswo"}},
+		"missing":      {},
+	} {
+		if r := e.post(admin, "/seiten/garten/verschieben", v); r.StatusCode != http.StatusBadRequest {
+			t.Errorf("%s: %d", name, r.StatusCode)
+		}
+	}
+	if r := e.post(admin, "/seiten/garten/verschieben", url.Values{"ziel": {heiz.ID + "/"}, "zurueck": {"liste"}}); r.Header.Get("Location") != "/seiten" {
+		t.Errorf("loop: %d %s", r.StatusCode, r.Header.Get("Location"))
+	}
+	garten, _ = e.st.Pages().BySlug(ctx, "garten")
+	if garten.ParentID != "" {
+		t.Errorf("loop moved the page: %q", garten.ParentID)
+	}
+	if r := e.post(admin, "/seiten", url.Values{"title": {"Neu"}, "body": {"n"}, "parent": {"nicht-hex"}}); r.StatusCode != http.StatusBadRequest {
+		t.Errorf("bad parent: %d", r.StatusCode)
 	}
 }
 

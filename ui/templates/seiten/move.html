@@ -1,0 +1,15 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>„{{$d.Page.Title}}“ verschieben</h1>
+<a class="button secondary" href="/seiten/{{$d.Page.Slug}}">Abbrechen</a></div>
+<form class="stack" method="post" action="/seiten/{{$d.Page.Slug}}/verschieben">
+<input type="hidden" name="zurueck" value="seite">
+<label>Neue Stelle<select name="ziel">
+{{range $d.Slots}}<optgroup label="{{.Label}}">
+{{range .Slots}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
+{{end}}</optgroup>
+{{end}}</select>
+<span class="hint">Unterseiten ziehen mit. In der Liste geht es auch mit der Maus oder dem Finger.</span></label>
+<div class="actions"><button class="button" type="submit">Verschieben</button></div>
+</form>
+{{end}}
