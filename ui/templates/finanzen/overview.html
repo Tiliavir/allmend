@@ -39,10 +39,10 @@
 </tr>
 {{end}}</tbody></table></div>
 </section>{{end}}
-<section class="card" aria-labelledby="kurse">
+{{if $d.Admin}}<section class="card" aria-labelledby="kurse">
 <h2 id="kurse">Kurse</h2>
 {{if $d.Run}}<p class="small">Zuletzt geladen am {{$d.RunAge}}: {{if $d.Run.OK}}{{$d.Run.Message}}{{else}}<span class="bad">{{$d.Run.Message}}</span>{{end}}</p>
 {{else}}<p class="muted small">Noch nie geladen. Kurse und Wechselkurse werden jeden Tag um 05:00 geladen.</p>{{end}}
 {{if $d.CanFetch}}<form method="post" action="/finanzen/kurse"><button class="button secondary" type="submit">Kurse jetzt laden</button></form>{{end}}
-</section>
+</section>{{end}}
 {{end}}
