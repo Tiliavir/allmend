@@ -132,6 +132,7 @@ func (f *formReader) msg() string {
 
 type finOverview struct {
 	finanzen.Overview
+	Admin    bool // the refresh log names every account's symbols: admins only
 	Run      *finanzen.Run
 	RunAge   string
 	CanFetch bool
@@ -143,13 +144,15 @@ func (s *Server) finOverview(w http.ResponseWriter, r *http.Request, a account.A
 		s.fail(w, r, err)
 		return
 	}
-	d := finOverview{Overview: o, CanFetch: a.IsAdmin && s.FinRefresh != nil}
-	if run, err := s.Finanzen.Market.LastRun(r.Context()); err == nil {
-		d.Run = &run
-		d.RunAge = run.At.In(s.Location).Format("02.01.2006 15:04")
-	} else if !errors.Is(err, finanzen.ErrNotFound) {
-		s.fail(w, r, err)
-		return
+	d := finOverview{Overview: o, Admin: a.IsAdmin, CanFetch: a.IsAdmin && s.FinRefresh != nil}
+	if a.IsAdmin {
+		if run, err := s.Finanzen.Market.LastRun(r.Context()); err == nil {
+			d.Run = &run
+			d.RunAge = run.At.In(s.Location).Format("02.01.2006 15:04")
+		} else if !errors.Is(err, finanzen.ErrNotFound) {
+			s.fail(w, r, err)
+			return
+		}
 	}
 	s.finPage(w, r, http.StatusOK, "overview", "Finanzen", "", d, false)
 }

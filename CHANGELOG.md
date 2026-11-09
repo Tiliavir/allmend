@@ -4,6 +4,15 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.2.2] - 2026-11-09
+
+### Security
+
+- Finanzen: the "Kurse" card on the overview (time and result of the last
+  price refresh) is shown to admins only. Its message names the price symbols
+  of every account's securities, so other accounts could see which
+  securities the admin holds.
+
 ## [0.2.1] - 2026-11-09
 
 ### Fixed

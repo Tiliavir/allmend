@@ -173,6 +173,11 @@ func TestFinanzen(t *testing.T) {
 	e.post(kim, "/konto/passwort", url.Values{"next": {"ein-langes-passwort"}})
 	if r, body := e.get(kim, "/finanzen"); r.StatusCode != 200 || strings.Contains(body, "Girokonto") {
 		t.Errorf("kim overview: %d", r.StatusCode)
+	} else if strings.Contains(body, `id="kurse"`) || strings.Contains(body, "XYZ") {
+		t.Error("kim sees the price refresh log (names all accounts' symbols)")
+	}
+	if _, body := e.get(admin, "/finanzen"); !strings.Contains(body, "XYZ: HTTP 500") {
+		t.Error("admin does not see the price refresh log")
 	}
 	for _, p := range []string{"/finanzen/wertpapiere/" + etf.ID, "/finanzen/transaktionen/" + txs[0].ID, "/finanzen/verlauf/2024"} {
 		if r, _ := e.get(kim, p); r.StatusCode != http.StatusNotFound {
