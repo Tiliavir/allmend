@@ -34,7 +34,7 @@ jobs:
         run: go run ./cmd/allmend demo -base "${BASE_PATH%/}/" _site
         env:
           BASE_PATH: ${{ steps.pages.outputs.base_path }}
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
