@@ -6,6 +6,8 @@ versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-09
+
 ### Added
 
 - Seiten: pages form a tree. Create a subpage from a page, see the path and
