@@ -18,6 +18,8 @@ import (
 type Page struct {
 	ID        string
 	Slug      string
+	ParentID  string // "" for a top-level page
+	Position  int    // order among the pages with the same parent
 	Title     string
 	Body      string // Markdown
 	Version   int    // increases with every save
@@ -39,6 +41,7 @@ var (
 	ErrInvalid   = errors.New("page invalid")
 	ErrNoTask    = errors.New("checklist item not found")
 	ErrAmbiguous = errors.New("checklist item ambiguous")
+	ErrPlace     = errors.New("page cannot be placed there")
 )
 
 // Limits.
@@ -71,13 +74,18 @@ type Revision struct {
 
 // Repository stores pages. Update must fail with ErrConflict when the stored
 // version is not want; every successful Insert/Update also stores a revision.
+// Insert puts the page last among its siblings. Move must fail with ErrPlace
+// when parentID is the page itself, one of its descendants or not a page, or
+// when beforeID is not a child of parentID; it renumbers the siblings. Delete
+// hands the children of the deleted page to its parent.
 type Repository interface {
-	List(ctx context.Context) ([]Page, error) // without deleted pages, newest first
+	List(ctx context.Context) ([]Page, error) // without deleted pages, by parent and position
 	BySlug(ctx context.Context, slug string) (Page, error)
 	SlugExists(ctx context.Context, slug string) (bool, error)
 	Insert(ctx context.Context, p Page) error
 	Update(ctx context.Context, p Page, want int) error
 	SetRights(ctx context.Context, p Page) error
+	Move(ctx context.Context, pageID, parentID, beforeID string) error
 	Delete(ctx context.Context, pageID, by string, at time.Time) error // soft delete
 	Revisions(ctx context.Context, pageID string) ([]Revision, error)
 }
@@ -125,18 +133,132 @@ func validate(title, body string) (string, string, error) {
 	return title, body, nil
 }
 
-// Create adds a page owned by a, readable and editable by everyone with access.
-func (s *Service) Create(ctx context.Context, a account.Account, title, body string) (Page, error) {
+// Recent lists the n pages a may read that changed last.
+func (s *Service) Recent(ctx context.Context, a account.Account, n int) ([]Page, error) {
+	ps, err := s.Readable(ctx, a)
+	if err != nil {
+		return nil, err
+	}
+	slices.SortStableFunc(ps, func(x, y Page) int { return y.UpdatedAt.Compare(x.UpdatedAt) })
+	return ps[:min(len(ps), n)], nil
+}
+
+// Node is a page in the tree with its children in order.
+type Node struct {
+	Page     Page
+	Children []Node
+}
+
+// Tree arranges the pages a may read by parent and position. A page whose
+// parent a may not read is shown at the top level.
+func (s *Service) Tree(ctx context.Context, a account.Account) ([]Node, error) {
+	ps, err := s.Readable(ctx, a)
+	if err != nil {
+		return nil, err
+	}
+	return tree(ps), nil
+}
+
+func tree(ps []Page) []Node {
+	seen := map[string]bool{}
+	for _, p := range ps {
+		seen[p.ID] = true
+	}
+	kids := map[string][]Page{}
+	for _, p := range ps {
+		parent := p.ParentID
+		if !seen[parent] {
+			parent = ""
+		}
+		kids[parent] = append(kids[parent], p)
+	}
+	var build func(parent string) []Node
+	build = func(parent string) []Node {
+		list := kids[parent]
+		slices.SortStableFunc(list, byPosition)
+		var out []Node
+		for _, p := range list {
+			out = append(out, Node{Page: p, Children: build(p.ID)})
+		}
+		return out
+	}
+	return build("")
+}
+
+// Ancestors returns the pages above p that a may read, top first; the chain
+// stops at the first page a may not read.
+func (s *Service) Ancestors(ctx context.Context, a account.Account, p Page) ([]Page, error) {
+	ps, err := s.Readable(ctx, a)
+	if err != nil {
+		return nil, err
+	}
+	byID := map[string]Page{}
+	for _, x := range ps {
+		byID[x.ID] = x
+	}
+	var out []Page
+	for id := p.ParentID; id != ""; {
+		x, ok := byID[id]
+		if !ok || len(out) > len(ps) {
+			break
+		}
+		out = append(out, x)
+		id = x.ParentID
+	}
+	slices.Reverse(out)
+	return out, nil
+}
+
+// Children returns the pages directly below p that a may read, in order.
+func (s *Service) Children(ctx context.Context, a account.Account, p Page) ([]Page, error) {
+	ps, err := s.Readable(ctx, a)
+	if err != nil {
+		return nil, err
+	}
+	ps = slices.DeleteFunc(ps, func(x Page) bool { return x.ParentID != p.ID })
+	slices.SortStableFunc(ps, byPosition)
+	return ps, nil
+}
+
+func byPosition(x, y Page) int {
+	if x.Position != y.Position {
+		return x.Position - y.Position
+	}
+	return strings.Compare(x.Title, y.Title)
+}
+
+// readableByID returns the page with id if a may read it.
+func (s *Service) readableByID(ctx context.Context, a account.Account, id string) (Page, error) {
+	ps, err := s.Readable(ctx, a)
+	if err != nil {
+		return Page{}, err
+	}
+	i := slices.IndexFunc(ps, func(p Page) bool { return p.ID == id })
+	if i < 0 {
+		return Page{}, ErrPlace
+	}
+	return ps[i], nil
+}
+
+// Create adds a page owned by a, readable and editable by everyone with
+// access, as the last child of parentID ("" for the top level), which a must
+// be able to read.
+func (s *Service) Create(ctx context.Context, a account.Account, parentID, title, body string) (Page, error) {
 	title, body, err := validate(title, body)
 	if err != nil {
 		return Page{Title: title, Body: body}, err
+	}
+	if parentID != "" {
+		if _, err := s.readableByID(ctx, a, parentID); err != nil {
+			return Page{Title: title, Body: body}, err
+		}
 	}
 	slug, err := s.uniqueSlug(ctx, title)
 	if err != nil {
 		return Page{}, err
 	}
 	now := s.now()
-	p := Page{ID: id.New(), Slug: slug, Title: title, Body: body, Version: 1, OwnerID: a.ID,
+	p := Page{ID: id.New(), Slug: slug, ParentID: parentID, Title: title, Body: body, Version: 1, OwnerID: a.ID,
 		ReadAll: true, WriteAll: true, CreatedAt: now, UpdatedAt: now, UpdatedBy: a.ID}
 	return p, s.Repo.Insert(ctx, p)
 }
@@ -190,7 +312,40 @@ func (s *Service) SetRights(ctx context.Context, a account.Account, slug string,
 	return p, s.Repo.SetRights(ctx, p)
 }
 
-// Delete hides a page; its revisions stay in the database.
+// Move places the page below parentID ("" for the top level), right before
+// its child beforeID ("" for last). a must be able to edit the page and read
+// the new parent and beforeID. The page's content and version stay as they are.
+func (s *Service) Move(ctx context.Context, a account.Account, slug, parentID, beforeID string) (Page, error) {
+	p, err := s.Get(ctx, a, slug)
+	if err != nil {
+		return p, err
+	}
+	if !p.CanWrite(a) {
+		return p, ErrForbidden
+	}
+	if parentID != "" {
+		if _, err := s.readableByID(ctx, a, parentID); err != nil {
+			return p, err
+		}
+	}
+	if beforeID != "" {
+		b, err := s.readableByID(ctx, a, beforeID)
+		if err != nil {
+			return p, err
+		}
+		if b.ParentID != parentID || b.ID == p.ID {
+			return p, ErrPlace
+		}
+	}
+	if err := s.Repo.Move(ctx, p.ID, parentID, beforeID); err != nil {
+		return p, err
+	}
+	p.ParentID = parentID
+	return p, nil
+}
+
+// Delete hides a page; its revisions stay in the database. Its children move
+// up to its parent.
 func (s *Service) Delete(ctx context.Context, a account.Account, slug string) error {
 	p, err := s.Get(ctx, a, slug)
 	if err != nil {

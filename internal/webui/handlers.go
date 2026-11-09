@@ -46,12 +46,12 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if a.Can(account.Seiten) {
-			ps, err := s.Pages.Readable(r.Context(), *a)
+			ps, err := s.Pages.Recent(r.Context(), *a, 5)
 			if err != nil {
 				s.fail(w, r, err)
 				return
 			}
-			d.Pages = ps[:min(len(ps), 5)]
+			d.Pages = ps
 		}
 	}
 	s.render(w, r, http.StatusOK, "start", Page{Data: d})

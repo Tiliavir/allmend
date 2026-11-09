@@ -1,8 +1,15 @@
 {{define "content"}}
 <div class="page-title"><h1>Seiten</h1><a class="button" href="/seiten/neu">Neue Seite</a></div>
-{{if .Data.Pages}}<div class="card">
-<ul class="list">
-{{range .Data.Pages}}<li><a href="/seiten/{{.Page.Slug}}">{{.Page.Title}}</a><span class="muted small">{{.Updated}}{{if .By}} · {{.By}}{{end}}{{if not .Page.ReadAll}} · eingeschränkt{{end}}</span></li>
-{{end}}</ul>
-</div>{{else}}<p class="muted">Noch keine Seiten. Leg die erste an – zum Beispiel eine Einkaufsliste mit <code>- [ ] Milch</code>.</p>{{end}}
+{{if .Data.Tree}}<div class="card">
+<ul class="baum" id="seitenbaum">
+{{template "seitenknoten" .Data.Tree}}</ul>
+<p class="muted small">Zum Umsortieren eine Zeile ziehen – auf eine Zeile fallen lassen macht sie zur Unterseite. Auf dem Handy erst gedrückt halten. Ohne Maus: „Verschieben“ auf der Seite.</p>
+</div>
+<form id="verschieben" method="post" action="/seiten" hidden><input type="hidden" name="ziel" value=""><input type="hidden" name="zurueck" value="liste"></form>
+{{else}}<p class="muted">Noch keine Seiten. Leg die erste an – zum Beispiel eine Einkaufsliste mit <code>- [ ] Milch</code>.</p>{{end}}
 {{end}}
+{{define "seitenknoten"}}{{range .}}<li id="seite-{{.Page.ID}}" data-id="{{.Page.ID}}" data-parent="{{.Page.ParentID}}" data-slug="{{.Page.Slug}}"{{if .Movable}} data-movable{{end}}>
+<div class="zeile"><a href="/seiten/{{.Page.Slug}}" draggable="false">{{.Page.Title}}</a><span class="muted small">{{.Updated}}{{if .By}} · {{.By}}{{end}}{{if not .Page.ReadAll}} · eingeschränkt{{end}}</span></div>
+{{if .Children}}<ul>
+{{template "seitenknoten" .Children}}</ul>{{end}}</li>
+{{end}}{{end}}

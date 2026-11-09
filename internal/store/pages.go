@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/tiliavir/allmend/internal/pages"
@@ -16,16 +17,17 @@ type Pages struct{ s *Store }
 // Pages returns the page repository.
 func (s *Store) Pages() *Pages { return &Pages{s} }
 
-const pageCols = `id, slug, title, body, version, owner_id, read_all, write_all, created_at, updated_at, updated_by`
+const pageCols = `id, slug, parent_id, position, title, body, version, owner_id, read_all, write_all, created_at, updated_at, updated_by`
 
 func (r *Pages) scan(ctx context.Context, row interface{ Scan(...any) error }) (pages.Page, error) {
 	var p pages.Page
 	var ra, wa int
 	var c, u string
-	if err := row.Scan(&p.ID, &p.Slug, &p.Title, &p.Body, &p.Version, &p.OwnerID, &ra, &wa, &c, &u, &p.UpdatedBy); err != nil {
+	var parent sql.NullString
+	if err := row.Scan(&p.ID, &p.Slug, &parent, &p.Position, &p.Title, &p.Body, &p.Version, &p.OwnerID, &ra, &wa, &c, &u, &p.UpdatedBy); err != nil {
 		return p, err
 	}
-	p.ReadAll, p.WriteAll = ra == 1, wa == 1
+	p.ReadAll, p.WriteAll, p.ParentID = ra == 1, wa == 1, parent.String
 	var err error
 	if p.CreatedAt, err = parseTime(c); err != nil {
 		return p, err
@@ -64,9 +66,9 @@ func (r *Pages) access(ctx context.Context, ps []pages.Page) error {
 	return rows.Err()
 }
 
-// List returns all pages that are not deleted, newest first.
+// List returns all pages that are not deleted, by parent and position.
 func (r *Pages) List(ctx context.Context) ([]pages.Page, error) {
-	rows, err := r.s.db.QueryContext(ctx, `SELECT `+pageCols+` FROM pages WHERE deleted_at IS NULL ORDER BY updated_at DESC`)
+	rows, err := r.s.db.QueryContext(ctx, `SELECT `+pageCols+` FROM pages WHERE deleted_at IS NULL ORDER BY parent_id, position, title`)
 	if err != nil {
 		return nil, fmt.Errorf("store.Pages.List: %w", err)
 	}
@@ -126,15 +128,41 @@ func writeAccess(ctx context.Context, tx *sql.Tx, p pages.Page) error {
 	return nil
 }
 
-// Insert creates a page with its first revision.
+// livePage reports whether id is a page that is not deleted.
+func livePage(ctx context.Context, tx *sql.Tx, id string) (bool, error) {
+	var n int
+	err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM pages WHERE id = ? AND deleted_at IS NULL`, id).Scan(&n)
+	return n == 1, err
+}
+
+// nextPosition is the position after the last child of parent ("" = top level).
+func nextPosition(ctx context.Context, tx *sql.Tx, parent string) (int, error) {
+	var n int
+	err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position) + 1, 0) FROM pages WHERE parent_id IS ? AND deleted_at IS NULL`, nullStr(parent)).Scan(&n)
+	return n, err
+}
+
+// Insert creates a page with its first revision, last among its siblings.
 func (r *Pages) Insert(ctx context.Context, p pages.Page) error {
 	tx, err := r.s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO pages (`+pageCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-		p.ID, p.Slug, p.Title, p.Body, p.Version, p.OwnerID, b2i(p.ReadAll), b2i(p.WriteAll), fmtTime(p.CreatedAt), fmtTime(p.UpdatedAt), p.UpdatedBy); err != nil {
+	if p.ParentID != "" {
+		ok, err := livePage(ctx, tx, p.ParentID)
+		if err != nil {
+			return fmt.Errorf("store.Pages.Insert parent: %w", err)
+		}
+		if !ok {
+			return pages.ErrPlace
+		}
+	}
+	if p.Position, err = nextPosition(ctx, tx, p.ParentID); err != nil {
+		return fmt.Errorf("store.Pages.Insert position: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO pages (`+pageCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		p.ID, p.Slug, nullStr(p.ParentID), p.Position, p.Title, p.Body, p.Version, p.OwnerID, b2i(p.ReadAll), b2i(p.WriteAll), fmtTime(p.CreatedAt), fmtTime(p.UpdatedAt), p.UpdatedBy); err != nil {
 		return fmt.Errorf("store.Pages.Insert: %w", err)
 	}
 	if err := writeAccess(ctx, tx, p); err != nil {
@@ -183,16 +211,100 @@ func (r *Pages) SetRights(ctx context.Context, p pages.Page) error {
 	return tx.Commit()
 }
 
-// Delete marks a page deleted; content and revisions stay.
+// Move places a page below parentID, right before beforeID ("" = last), and
+// renumbers the siblings.
+func (r *Pages) Move(ctx context.Context, pageID, parentID, beforeID string) error {
+	tx, err := r.s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	ok, err := livePage(ctx, tx, pageID)
+	if err != nil {
+		return fmt.Errorf("store.Pages.Move: %w", err)
+	}
+	if !ok {
+		return pages.ErrNotFound
+	}
+	if parentID != "" {
+		ok, err := livePage(ctx, tx, parentID)
+		if err != nil {
+			return fmt.Errorf("store.Pages.Move parent: %w", err)
+		}
+		// The new parent must not be the page itself or below it.
+		var loop int
+		if err := tx.QueryRowContext(ctx, `
+WITH RECURSIVE up(id) AS (
+	SELECT ?
+	UNION SELECT p.parent_id FROM pages p JOIN up ON p.id = up.id WHERE p.parent_id IS NOT NULL
+) SELECT COUNT(*) FROM up WHERE id = ?`, parentID, pageID).Scan(&loop); err != nil {
+			return fmt.Errorf("store.Pages.Move loop: %w", err)
+		}
+		if !ok || loop > 0 {
+			return pages.ErrPlace
+		}
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM pages WHERE parent_id IS ? AND deleted_at IS NULL AND id != ? ORDER BY position, title`, nullStr(parentID), pageID)
+	if err != nil {
+		return fmt.Errorf("store.Pages.Move siblings: %w", err)
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+		return err
+	}
+	at := len(ids)
+	if beforeID != "" {
+		if at = slices.Index(ids, beforeID); at < 0 {
+			return pages.ErrPlace
+		}
+	}
+	ids = slices.Insert(ids, at, pageID)
+	if _, err := tx.ExecContext(ctx, `UPDATE pages SET parent_id = ? WHERE id = ?`, nullStr(parentID), pageID); err != nil {
+		return fmt.Errorf("store.Pages.Move: %w", err)
+	}
+	for i, id := range ids {
+		if _, err := tx.ExecContext(ctx, `UPDATE pages SET position = ? WHERE id = ?`, i, id); err != nil {
+			return fmt.Errorf("store.Pages.Move position: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+// Delete marks a page deleted; content and revisions stay. Its children move
+// to its parent, after the parent's other children, in their order.
 func (r *Pages) Delete(ctx context.Context, pageID, by string, at time.Time) error {
-	res, err := r.s.db.ExecContext(ctx, `UPDATE pages SET deleted_at=?, deleted_by=? WHERE id=? AND deleted_at IS NULL`, fmtTime(at), by, pageID)
+	tx, err := r.s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var parent sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT parent_id FROM pages WHERE id = ? AND deleted_at IS NULL`, pageID).Scan(&parent)
+	if errors.Is(err, sql.ErrNoRows) {
+		return pages.ErrNotFound
+	}
 	if err != nil {
 		return fmt.Errorf("store.Pages.Delete: %w", err)
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return pages.ErrNotFound
+	if _, err := tx.ExecContext(ctx, `UPDATE pages SET deleted_at=?, deleted_by=? WHERE id=?`, fmtTime(at), by, pageID); err != nil {
+		return fmt.Errorf("store.Pages.Delete: %w", err)
 	}
-	return nil
+	next, err := nextPosition(ctx, tx, parent.String)
+	if err != nil {
+		return fmt.Errorf("store.Pages.Delete position: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE pages SET parent_id = ?, position = ? + position WHERE parent_id = ?`, nullStr(parent.String), next, pageID); err != nil {
+		return fmt.Errorf("store.Pages.Delete children: %w", err)
+	}
+	return tx.Commit()
 }
 
 // Revisions lists a page's revisions, newest first.

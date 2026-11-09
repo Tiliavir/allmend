@@ -1,9 +1,12 @@
 {{define "content"}}
 {{$d := .Data}}
+{{if $d.Ancestors}}<nav class="pfad small" aria-label="Übergeordnete Seiten"><a href="/seiten">Seiten</a>{{range $d.Ancestors}} › <a href="/seiten/{{.Slug}}">{{.Title}}</a>{{end}}</nav>{{end}}
 <div class="page-title">
 <h1>{{$d.Page.Title}}</h1>
 <div class="actions">
 {{if $d.CanWrite}}<a class="button" href="/seiten/{{$d.Page.Slug}}/bearbeiten">Bearbeiten</a>{{end}}
+<a class="button secondary" href="/seiten/neu?unter={{$d.Page.Slug}}">Unterseite</a>
+{{if $d.CanWrite}}<a class="button secondary" href="/seiten/{{$d.Page.Slug}}/verschieben">Verschieben</a>{{end}}
 <a class="button secondary" href="/seiten/{{$d.Page.Slug}}/versionen">Versionen</a>
 {{if $d.CanManage}}<a class="button secondary" href="/seiten/{{$d.Page.Slug}}/rechte">Rechte</a>{{end}}
 </div>
@@ -11,5 +14,10 @@
 <article class="card prose">
 {{$d.HTML}}
 </article>
+{{if $d.Children}}<section class="card" aria-labelledby="unterseiten"><h2 id="unterseiten">Unterseiten</h2>
+<ul class="list">
+{{range $d.Children}}<li><a href="/seiten/{{.Slug}}">{{.Title}}</a></li>
+{{end}}</ul>
+</section>{{end}}
 <p class="muted small">Version {{$d.Page.Version}} · geändert {{$d.Updated}}{{if $d.By}} von {{$d.By}}{{end}} · angelegt von {{$d.Owner}}</p>
 {{end}}

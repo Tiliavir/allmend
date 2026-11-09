@@ -193,6 +193,18 @@ th { font-size: 13px; color: var(--muted); font-weight: 600; }
 ul.list { list-style: none; margin: 0; padding: 0; }
 ul.list li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; align-items: center; min-height: 48px; padding: 6px 0; border-bottom: 1px solid var(--border); }
 ul.list li:last-child { border-bottom: 0; }
+
+/* Page tree (Seiten) */
+ul.baum, ul.baum ul { list-style: none; margin: 0; padding: 0; }
+ul.baum ul { margin-left: 22px; border-left: 2px solid var(--border); padding-left: 10px; }
+ul.baum .zeile { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 16px; min-height: 44px; padding: 4px 8px; border-radius: 8px; border-top: 2px solid transparent; border-bottom: 2px solid transparent; }
+ul.baum li[data-movable] > .zeile { cursor: grab; touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+ul.baum.zieht, ul.baum.zieht * { cursor: grabbing; }
+ul.baum li.gezogen > .zeile { opacity: .45; }
+ul.baum li.drop-before > .zeile { border-top-color: var(--focus); }
+ul.baum li.drop-after > .zeile { border-bottom-color: var(--focus); }
+ul.baum li.drop-into > .zeile { background: var(--tint-2); outline: 2px solid var(--focus); outline-offset: -2px; }
+nav.pfad { margin-bottom: 8px; color: var(--muted); }
 form.wide { max-width: 860px; }
 textarea { font: 15px/1.5 ui-monospace, Menlo, Consolas, monospace; resize: vertical; }
 label.indent { padding-left: 30px; }
