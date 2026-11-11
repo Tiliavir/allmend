@@ -24,13 +24,18 @@ const (
 	Miss Result = "wasser"
 	Hit  Result = "treffer"
 	Sunk Result = "versenkt"
+	Mine Result = "mine" // a sea mine: the firing ship is lost
 )
+
+// NoShip is Shot.Ship when the variant does not name the firing ship.
+const NoShip = -1
 
 // Shot is one fired cell.
 type Shot struct {
 	Seq     int
 	Shooter string // account id
 	X, Y    int
+	Ship    int // index of the firing ship in the shooter's fleet, or NoShip
 	Result  Result
 	At      time.Time
 }
@@ -48,6 +53,8 @@ type Game struct {
 	Winner    string
 	FleetA    []Ship // nil until placed
 	FleetB    []Ship
+	MinesA    [][2]int // nil until placed or when the variant has none
+	MinesB    [][2]int
 	Shots     []Shot
 	Version   int
 	CreatedAt time.Time
@@ -83,22 +90,30 @@ func (g *Game) FleetOf(p string) []Ship {
 	return g.FleetB
 }
 
-// Place sets p's fleet during setup. The game starts once both have placed;
-// the challenger (A) begins.
-func (g *Game) Place(p string, ships []Ship) error {
+// MinesOf returns p's sea mines.
+func (g *Game) MinesOf(p string) [][2]int {
+	if p == g.PlayerA {
+		return g.MinesA
+	}
+	return g.MinesB
+}
+
+// Place sets p's fleet and mines during setup. The game starts once both
+// have placed; the challenger (A) begins.
+func (g *Game) Place(p string, ships []Ship, mines [][2]int) error {
 	if !g.IsPlayer(p) {
 		return ErrNotYours
 	}
 	if g.Status != Setup {
 		return ErrState
 	}
-	if err := CheckFleet(ships, g.Variant.Size(), g.Touching); err != nil {
+	if err := CheckSetup(ships, mines, g.Variant.Mines(), g.Variant.Size(), g.Touching); err != nil {
 		return err
 	}
 	if p == g.PlayerA {
-		g.FleetA = ships
+		g.FleetA, g.MinesA = ships, mines
 	} else {
-		g.FleetB = ships
+		g.FleetB, g.MinesB = ships, mines
 	}
 	if g.FleetA != nil && g.FleetB != nil {
 		g.Status, g.Turn = Playing, g.PlayerA
@@ -125,20 +140,39 @@ func hitSet(shots []Shot) map[[2]int]bool {
 	return m
 }
 
-// SunkShips returns target's ships that are completely hit.
+// SunkShips returns target's ships that are completely hit or were lost
+// on a sea mine.
 func (g *Game) SunkShips(target string) []Ship {
 	hits := hitSet(g.ShotsAt(target))
+	mined := g.minedShips(target)
 	var out []Ship
-	for _, s := range g.FleetOf(target) {
-		all := true
+	for i, s := range g.FleetOf(target) {
+		sunk := true
 		for _, c := range s.Cells() {
-			all = all && hits[c]
+			sunk = sunk && hits[c]
 		}
-		if all {
+		if sunk || mined[i] {
 			out = append(out, s)
 		}
 	}
 	return out
+}
+
+// minedShips returns the indexes of p's ships lost on a sea mine.
+func (g *Game) minedShips(p string) map[int]bool {
+	m := map[int]bool{}
+	for _, s := range g.Shots {
+		if s.Shooter == p && s.Result == Mine {
+			m[s.Ship] = true
+		}
+	}
+	return m
+}
+
+// Afloat reports whether p's ship i is not sunk.
+func (g *Game) Afloat(p string, i int) bool {
+	fleet := g.FleetOf(p)
+	return i >= 0 && i < len(fleet) && !containsShip(g.SunkShips(p), fleet[i])
 }
 
 // Blocked returns cells next to target's sunk ships (water by AutoWater).
@@ -187,8 +221,10 @@ func containsShip(ss []Ship, s Ship) bool {
 	return false
 }
 
-// Fire lets p shoot at the given cells (exactly ShotsPerTurn of them).
-func (g *Game) Fire(p string, cells [][2]int, now time.Time) ([]Shot, error) {
+// Fire lets p shoot at the given cells (exactly ShotsPerTurn of them). In the
+// Mines variant ship names the firing ship (index in p's fleet, afloat);
+// otherwise it must be NoShip.
+func (g *Game) Fire(p string, cells [][2]int, ship int, now time.Time) ([]Shot, error) {
 	if !g.IsPlayer(p) {
 		return nil, ErrNotYours
 	}
@@ -198,6 +234,13 @@ func (g *Game) Fire(p string, cells [][2]int, now time.Time) ([]Shot, error) {
 	if g.Turn != p {
 		return nil, ErrNotTurn
 	}
+	if g.Variant.Mines() > 0 {
+		if !g.Afloat(p, ship) {
+			return nil, fmt.Errorf("%w: wähle ein Schiff, das noch schwimmt", ErrShot)
+		}
+	} else if ship != NoShip {
+		return nil, fmt.Errorf("%w: in dieser Variante feuert kein bestimmtes Schiff", ErrShot)
+	}
 	want := g.ShotsPerTurn(p)
 	if len(cells) != want {
 		return nil, fmt.Errorf("%w: genau %d Schuss erwartet", ErrShot, want)
@@ -206,6 +249,11 @@ func (g *Game) Fire(p string, cells [][2]int, now time.Time) ([]Shot, error) {
 	n := g.Variant.Size()
 	done := hitSet(g.ShotsAt(target))
 	blocked := g.Blocked(target)
+	for _, s := range g.SunkShips(target) {
+		for _, c := range s.Cells() {
+			done[c] = true // also the cells of a ship lost on a mine
+		}
+	}
 	seen := map[[2]int]bool{}
 	for _, c := range cells {
 		switch {
@@ -218,17 +266,24 @@ func (g *Game) Fire(p string, cells [][2]int, now time.Time) ([]Shot, error) {
 		}
 		seen[c] = true
 	}
+	mines := map[[2]int]bool{}
+	for _, m := range g.MinesOf(target) {
+		mines[m] = true
+	}
 	var fired []Shot
 	anyHit := false
 	for _, c := range cells {
 		res := Miss
+		if mines[c] {
+			res = Mine
+		}
 		for _, s := range g.FleetOf(target) {
 			if s.Has(c[0], c[1]) {
 				res, anyHit = Hit, true
 				break
 			}
 		}
-		shot := Shot{Seq: len(g.Shots) + 1, Shooter: p, X: c[0], Y: c[1], Result: res, At: now}
+		shot := Shot{Seq: len(g.Shots) + 1, Shooter: p, X: c[0], Y: c[1], Ship: ship, Result: res, At: now}
 		g.Shots = append(g.Shots, shot)
 		if res == Hit {
 			for _, s := range g.SunkShips(target) {
@@ -241,6 +296,10 @@ func (g *Game) Fire(p string, cells [][2]int, now time.Time) ([]Shot, error) {
 	}
 	if len(g.SunkShips(target)) == len(g.FleetOf(target)) {
 		g.Status, g.Winner, g.Turn = Finished, p, ""
+		return fired, nil
+	}
+	if len(g.SunkShips(p)) == len(g.FleetOf(p)) { // last ship lost on a mine
+		g.Status, g.Winner, g.Turn = Finished, target, ""
 		return fired, nil
 	}
 	if g.Variant != Streak || !anyHit {

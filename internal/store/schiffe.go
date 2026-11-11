@@ -77,7 +77,27 @@ func (r *Schiffe) Get(ctx context.Context, id string) (schiffe.Game, error) {
 	if err := errors.Join(ships.Err(), ships.Close()); err != nil {
 		return g, err
 	}
-	shots, err := r.s.db.QueryContext(ctx, `SELECT seq, shooter, x, y, result, at FROM game_shots WHERE game_id = ? ORDER BY seq`, id)
+	mines, err := r.s.db.QueryContext(ctx, `SELECT player_id, x, y FROM game_mines WHERE game_id = ? ORDER BY player_id, idx`, id)
+	if err != nil {
+		return g, err
+	}
+	for mines.Next() {
+		var p string
+		var m [2]int
+		if err := mines.Scan(&p, &m[0], &m[1]); err != nil {
+			_ = mines.Close()
+			return g, err
+		}
+		if p == g.PlayerA {
+			g.MinesA = append(g.MinesA, m)
+		} else {
+			g.MinesB = append(g.MinesB, m)
+		}
+	}
+	if err := errors.Join(mines.Err(), mines.Close()); err != nil {
+		return g, err
+	}
+	shots, err := r.s.db.QueryContext(ctx, `SELECT seq, shooter, x, y, ship, result, at FROM game_shots WHERE game_id = ? ORDER BY seq`, id)
 	if err != nil {
 		return g, err
 	}
@@ -85,8 +105,13 @@ func (r *Schiffe) Get(ctx context.Context, id string) (schiffe.Game, error) {
 	for shots.Next() {
 		var s schiffe.Shot
 		var res, at string
-		if err := shots.Scan(&s.Seq, &s.Shooter, &s.X, &s.Y, &res, &at); err != nil {
+		var ship sql.NullInt64
+		if err := shots.Scan(&s.Seq, &s.Shooter, &s.X, &s.Y, &ship, &res, &at); err != nil {
 			return g, err
+		}
+		s.Ship = schiffe.NoShip
+		if ship.Valid {
+			s.Ship = int(ship.Int64)
 		}
 		s.Result = schiffe.Result(res)
 		if s.At, err = parseTime(at); err != nil {
@@ -137,6 +162,12 @@ func (r *Schiffe) Save(ctx context.Context, g schiffe.Game, want int) error {
 				return fmt.Errorf("store.Schiffe.Save ship: %w", err)
 			}
 		}
+		for i, m := range g.MinesOf(p) {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO game_mines (game_id, player_id, idx, x, y) VALUES (?,?,?,?,?)`,
+				g.ID, p, i, m[0], m[1]); err != nil {
+				return fmt.Errorf("store.Schiffe.Save mine: %w", err)
+			}
+		}
 	}
 	var last int
 	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(seq), 0) FROM game_shots WHERE game_id = ?`, g.ID).Scan(&last); err != nil {
@@ -146,8 +177,12 @@ func (r *Schiffe) Save(ctx context.Context, g schiffe.Game, want int) error {
 		if s.Seq <= last {
 			continue
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO game_shots (game_id, seq, shooter, x, y, result, at) VALUES (?,?,?,?,?,?,?)`,
-			g.ID, s.Seq, s.Shooter, s.X, s.Y, string(s.Result), fmtTime(s.At)); err != nil {
+		var ship any
+		if s.Ship != schiffe.NoShip {
+			ship = s.Ship
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO game_shots (game_id, seq, shooter, x, y, ship, result, at) VALUES (?,?,?,?,?,?,?,?)`,
+			g.ID, s.Seq, s.Shooter, s.X, s.Y, ship, string(s.Result), fmtTime(s.At)); err != nil {
 			return fmt.Errorf("store.Schiffe.Save shot: %w", err)
 		}
 	}
