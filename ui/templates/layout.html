@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{if .Title}}{{.Title}} · {{end}}Allmend</title>
 <link rel="stylesheet" href="/static/allmend.css">
-<link rel="icon" href="/static/allmend.svg" type="image/svg+xml">
+{{with .DarkMedia}}<link rel="stylesheet" href="/static/dark.css" media="{{.}}">
+{{end}}<link rel="icon" href="/static/allmend.svg" type="image/svg+xml">
 {{if eq .Module "orte"}}<link rel="stylesheet" href="/static/vendor/leaflet-1.9.4.css">
 {{end}}{{if .Demo}}<script src="/static/demo.js" type="module"></script>
 {{end}}{{range .Scripts}}<script src="{{.Src}}"{{if .Module}} type="module"{{else}} defer{{end}}></script>
@@ -18,7 +19,7 @@
 {{range .Nav}}<a href="{{.Path}}"{{if .Current}} aria-current="page"{{end}}>{{.Name}}</a>
 {{end}}</nav>
 <div class="user"><details>
-<summary><span class="avatar" aria-hidden="true">{{.Initial}}</span>{{.Account.DisplayName}}</summary>
+<summary><span class="avatar" aria-hidden="true">{{.Initial}}</span><span class="name">{{.Account.DisplayName}}</span></summary>
 <div class="menu">
 <a href="/konto">Konto</a>
 {{if .Account.IsAdmin}}<a href="/verwaltung">Verwaltung</a>{{end}}

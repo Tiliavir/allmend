@@ -4,6 +4,21 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.5.0] - 2026-11-11
+
+### Added
+
+- Konto: "Darstellung" – Automatisch (wie das Gerät), Hell oder Dunkel (#17).
+  Schema step 11 adds the setting; existing accounts stay on Automatisch.
+- Verwaltung: admins can delete an account that has no data yet, e.g. an
+  invitation to a wrong address. Accounts with data are disabled instead (#17).
+
+### Changed
+
+- Header on phones and tablets: the account menu stays top right, the
+  modules wrap below it; on phones only the avatar is shown (#16).
+- Start page on phones: module tiles in two compact columns (#18).
+
 ## [0.4.0] - 2026-11-11
 
 ### Added

@@ -1,6 +1,7 @@
-/* Allmend — direction D: calm layout, one colour per module. Plain CSS. */
+/* Allmend — direction D: calm layout, one colour per module. Plain CSS.
+   Dark colours live in dark.css, linked per the account's Darstellung. */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --bg: #f4f5fa;
   --surface: #fff;
   --text: #1b1b2f;
@@ -25,30 +26,6 @@
   --tint-3: #ffe1d6;
   --tint-4: #ddf5e8;
   --tint-5: #ece4ff;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14151c;
-    --surface: #1d1f29;
-    --text: #e9eaf0;
-    --muted: #a7aabb;
-    --border: #2e313f;
-    --focus: #8fb5f6;
-    --danger: #ff8a80;
-    --ok: #6fd3ae;
-    --velo: #6ea3f7;
-    --finanzen: #4cc39d;
-    --arbeitswege: #f0a35e;
-    --orte: #c49be6;
-    --seiten: #aab3c0;
-    --schiffe: #7fb0e6;
-    --ausgaben: #ec8fbd;
-    --tint-1: #3d3418;
-    --tint-2: #1c2d48;
-    --tint-3: #45281f;
-    --tint-4: #193a2d;
-    --tint-5: #2e2647;
-  }
 }
 .m-velo { --accent: var(--velo); }
 .m-finanzen { --accent: var(--finanzen); }
@@ -142,7 +119,6 @@ main { max-width: 1160px; margin: 0 auto; padding: 32px 28px 64px; display: flex
 }
 .module:hover { border-color: var(--accent); }
 .module .chip { width: 44px; height: 44px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; background: var(--accent); color: #fff; }
-@media (prefers-color-scheme: dark) { .module .chip { color: #14151c; } }
 .module b { font: 21px var(--head); }
 
 /* ── forms ──────────────────────────────────────────── */
@@ -163,7 +139,6 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; accent-
   border-radius: 10px; border: 1px solid transparent; background: var(--accent); color: #fff; font: inherit; font-weight: 600;
   text-decoration: none; cursor: pointer;
 }
-@media (prefers-color-scheme: dark) { .button, button.button { color: #14151c; } }
 .button.secondary { background: transparent; color: var(--text); border-color: var(--border); }
 .button.danger { background: var(--danger); }
 .inline { display: inline; }
@@ -183,9 +158,22 @@ th { font-size: 13px; color: var(--muted); font-weight: 600; }
 .divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; }
 .divider::before, .divider::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
 
+/* Narrower than one header row: account menu stays top right, the modules
+   wrap below (#16). Phones: avatar only, compact module tiles (#18). */
+@media (max-width: 1040px) {
+  .site-header .user { order: 2; margin-left: auto; }
+  .site-header .nav { order: 3; flex-basis: 100%; }
+}
 @media (max-width: 640px) {
-  .site-header { padding: 10px 16px; }
+  .site-header { padding: 8px 12px 8px 16px; gap: 4px 12px; }
+  .nav { gap: 2px; margin: 0 -8px; }
+  .nav a { padding: 0 8px; }
+  .user .name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   main { padding: 24px 16px 48px; }
+  .grid.modules { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .module { flex-direction: row; align-items: center; gap: 10px; min-height: 64px; padding: 12px; }
+  .module .chip { width: 36px; height: 36px; border-radius: 10px; flex: none; }
+  .module b { font-size: 17px; line-height: 1.2; overflow-wrap: anywhere; }
 }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
@@ -328,12 +316,6 @@ table.fleet input[type="text"] { width: 72px; text-transform: uppercase; }
 :root {
   --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
   --series-5: #e87ba4; --series-6: #008300; --series-7: #6250d6; --series-8: #e34948;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
-    --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
-  }
 }
 .pos { color: var(--ok); }
 .neg { color: var(--danger); }

@@ -26,5 +26,13 @@
 <form method="post" action="/verwaltung/konten/{{$a.ID}}/passwort"><button class="button secondary" type="submit">{{if $a.HasLocalLogin}}Neues Einmal-Passwort{{else}}Passwort-Anmeldung aktivieren{{end}}</button></form>
 {{if $a.HasLocalLogin}}<form method="post" action="/verwaltung/konten/{{$a.ID}}/passwort/entfernen"><button class="button danger" type="submit">Passwort-Anmeldung entfernen</button></form>{{end}}
 </section>
+{{if not .Data.Self}}<section class="card">
+<h2>Konto löschen</h2>
+<p class="muted small">Nur möglich, solange das Konto keine Daten hat (z. B. eine Einladung an die falsche Adresse). Sonst sperre es: dann bleiben alle Daten erhalten.</p>
+<form class="stack" method="post" action="/verwaltung/konten/{{$a.ID}}/loeschen">
+<label class="check"><input type="checkbox" name="confirm" value="1" required>{{$a.DisplayName}} endgültig löschen</label>
+<div class="actions"><button class="button danger" type="submit">Löschen</button></div>
+</form>
+</section>{{end}}
 </div>
 {{end}}

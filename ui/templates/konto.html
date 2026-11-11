@@ -7,6 +7,15 @@
 <p class="muted small">Name, Module und Rechte verwaltet ein Admin.</p>
 <p class="small">Anmeldung: {{if .Account.GoogleSub}}Google{{else}}Google noch nicht verknüpft{{end}}{{if .Account.HasLocalLogin}} · Passwort{{end}}</p>
 </section>
+<section class="card">
+<h2>Darstellung</h2>
+<form class="stack" method="post" action="/konto/darstellung">
+<fieldset><legend>Farben</legend>
+{{range .Data.Themes}}<label class="check"><input type="radio" name="theme" value="{{.}}"{{if eq . $.Account.Theme}} checked{{end}} required>{{themeLabel .}}</label>
+{{end}}</fieldset>
+<div class="actions"><button class="button" type="submit">Speichern</button></div>
+</form>
+</section>
 {{if .Account.HasLocalLogin}}<section class="card">
 <h2>Passwort ändern</h2>
 {{if .Account.PasswordMustChange}}<p class="flash error" role="alert">Bitte ersetze das Einmal-Passwort durch ein eigenes.</p>{{end}}

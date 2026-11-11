@@ -1,0 +1,29 @@
+/* Allmend dark colours. The layout links this file always ("Dunkel"),
+   never ("Hell") or for (prefers-color-scheme: dark) ("Automatisch"). */
+:root {
+  color-scheme: dark;
+  --bg: #14151c;
+  --surface: #1d1f29;
+  --text: #e9eaf0;
+  --muted: #a7aabb;
+  --border: #2e313f;
+  --focus: #8fb5f6;
+  --danger: #ff8a80;
+  --ok: #6fd3ae;
+  --velo: #6ea3f7;
+  --finanzen: #4cc39d;
+  --arbeitswege: #f0a35e;
+  --orte: #c49be6;
+  --seiten: #aab3c0;
+  --schiffe: #7fb0e6;
+  --ausgaben: #ec8fbd;
+  --tint-1: #3d3418;
+  --tint-2: #1c2d48;
+  --tint-3: #45281f;
+  --tint-4: #193a2d;
+  --tint-5: #2e2647;
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+  --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+}
+.module .chip { color: #14151c; }
+.button, button.button { color: #14151c; }
