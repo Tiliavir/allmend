@@ -25,9 +25,9 @@ func TestSeaMinesMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = d.Close() })
-	opt := db.Options{BackupDir: filepath.Join(dir, "backup"), Env: db.MigrationEnv{AdminEmail: "admin@example.org"}}
+	opt := db.Options{BackupDir: filepath.Join(dir, "backup")}
 	all := migrations.All()
-	if _, err := db.Migrate(ctx, d, path, all[:9], opt); err != nil {
+	if _, err := db.Migrate(ctx, d, all[:9], opt); err != nil {
 		t.Fatal(err)
 	}
 	now := "2026-01-01T00:00:00Z"
@@ -42,7 +42,7 @@ func TestSeaMinesMigration(t *testing.T) {
 			t.Fatalf("%s: %v", stmt, err)
 		}
 	}
-	if _, err := db.Migrate(ctx, d, path, all, opt); err != nil {
+	if _, err := db.Migrate(ctx, d, all, opt); err != nil {
 		t.Fatal(err)
 	}
 	g, err := store.New(d).Schiffe().Get(ctx, "g")
