@@ -65,8 +65,8 @@ func TestCoord(t *testing.T) {
 
 func newGame(v Variant) *Game {
 	g := &Game{PlayerA: "a", PlayerB: "b", Variant: v, Status: Setup, AutoWater: true}
-	_ = g.Place("a", fleet())
-	_ = g.Place("b", fleet())
+	_ = g.Place("a", fleet(), mines(v))
+	_ = g.Place("b", fleet(), mines(v))
 	return g
 }
 
@@ -76,15 +76,15 @@ func TestClassicTurnsAndWin(t *testing.T) {
 	if g.Status != Playing || g.Turn != "a" {
 		t.Fatal("not started")
 	}
-	if _, err := g.Fire("b", [][2]int{{0, 0}}, time.Now()); !errors.Is(err, ErrNotTurn) {
+	if _, err := g.Fire("b", [][2]int{{0, 0}}, NoShip, time.Now()); !errors.Is(err, ErrNotTurn) {
 		t.Error("b fired out of turn")
 	}
-	s, _ := g.Fire("a", [][2]int{{0, 0}}, time.Now())
+	s, _ := g.Fire("a", [][2]int{{0, 0}}, NoShip, time.Now())
 	if s[0].Result != Hit || g.Turn != "b" {
 		t.Errorf("hit: %+v turn %s", s, g.Turn)
 	}
-	g.Fire("b", [][2]int{{9, 9}}, time.Now())
-	if _, err := g.Fire("a", [][2]int{{0, 0}}, time.Now()); !errors.Is(err, ErrShot) {
+	g.Fire("b", [][2]int{{9, 9}}, NoShip, time.Now())
+	if _, err := g.Fire("a", [][2]int{{0, 0}}, NoShip, time.Now()); !errors.Is(err, ErrShot) {
 		t.Error("double shot accepted")
 	}
 	// a sinks everything; b always misses somewhere fresh.
@@ -98,12 +98,12 @@ func TestClassicTurnsAndWin(t *testing.T) {
 				break
 			}
 			if g.Turn == "b" {
-				if _, err := g.Fire("b", [][2]int{{next % 10, next / 10}}, time.Now()); err != nil {
+				if _, err := g.Fire("b", [][2]int{{next % 10, next / 10}}, NoShip, time.Now()); err != nil {
 					t.Fatal(err)
 				}
 				next--
 			}
-			if _, err := g.Fire("a", [][2]int{c}, time.Now()); err != nil {
+			if _, err := g.Fire("a", [][2]int{c}, NoShip, time.Now()); err != nil {
 				t.Fatalf("fire %v: %v", c, err)
 			}
 		}
@@ -115,18 +115,18 @@ func TestClassicTurnsAndWin(t *testing.T) {
 
 func TestStreakAndAutoWater(t *testing.T) {
 	g := newGame(Streak)
-	g.Fire("a", [][2]int{{0, 6}}, time.Now())
+	g.Fire("a", [][2]int{{0, 6}}, NoShip, time.Now())
 	if g.Turn != "a" {
 		t.Fatal("streak: hit must keep the turn")
 	}
-	s, _ := g.Fire("a", [][2]int{{1, 6}}, time.Now())
+	s, _ := g.Fire("a", [][2]int{{1, 6}}, NoShip, time.Now())
 	if s[0].Result != Sunk {
 		t.Fatalf("want sunk, got %s", s[0].Result)
 	}
-	if _, err := g.Fire("a", [][2]int{{2, 6}}, time.Now()); !errors.Is(err, ErrShot) {
+	if _, err := g.Fire("a", [][2]int{{2, 6}}, NoShip, time.Now()); !errors.Is(err, ErrShot) {
 		t.Error("cell next to sunk ship accepted with auto water")
 	}
-	g.Fire("a", [][2]int{{9, 9}}, time.Now())
+	g.Fire("a", [][2]int{{9, 9}}, NoShip, time.Now())
 	if g.Turn != "b" {
 		t.Error("streak: miss must pass the turn")
 	}
@@ -137,18 +137,113 @@ func TestSalvo(t *testing.T) {
 	if n := g.ShotsPerTurn("a"); n != 5 {
 		t.Fatalf("salvo size %d", n)
 	}
-	if _, err := g.Fire("a", [][2]int{{9, 9}}, time.Now()); !errors.Is(err, ErrShot) {
+	if _, err := g.Fire("a", [][2]int{{9, 9}}, NoShip, time.Now()); !errors.Is(err, ErrShot) {
 		t.Error("single shot accepted in salvo")
 	}
-	if _, err := g.Fire("a", [][2]int{{9, 9}, {9, 8}, {9, 7}, {9, 6}, {9, 9}}, time.Now()); !errors.Is(err, ErrShot) {
+	if _, err := g.Fire("a", [][2]int{{9, 9}, {9, 8}, {9, 7}, {9, 6}, {9, 9}}, NoShip, time.Now()); !errors.Is(err, ErrShot) {
 		t.Error("duplicate cell in salvo accepted")
 	}
-	if _, err := g.Fire("a", [][2]int{{9, 9}, {9, 8}, {9, 7}, {9, 6}, {9, 0}}, time.Now()); err != nil || g.Turn != "b" {
+	if _, err := g.Fire("a", [][2]int{{9, 9}, {9, 8}, {9, 7}, {9, 6}, {9, 0}}, NoShip, time.Now()); err != nil || g.Turn != "b" {
 		t.Fatalf("salvo: %v", err)
 	}
 	// b sinks a's battleship: a's next salvo has 4 shots.
-	g.Fire("b", [][2]int{{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}}, time.Now())
+	g.Fire("b", [][2]int{{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}}, NoShip, time.Now())
 	if n := g.ShotsPerTurn("a"); n != 4 {
 		t.Errorf("after losing the battleship: %d", n)
+	}
+}
+
+func mines(v Variant) [][2]int {
+	if v.Mines() == 0 {
+		return nil
+	}
+	return [][2]int{{7, 9}, {9, 9}, {9, 0}}
+}
+
+func TestCheckSetupMines(t *testing.T) {
+	if err := CheckSetup(fleet(), mines(Mines), 3, 10, false); err != nil {
+		t.Fatal(err)
+	}
+	for name, ms := range map[string][][2]int{
+		"too few":     {{7, 9}, {9, 9}},
+		"on a ship":   {{7, 9}, {9, 9}, {0, 0}},
+		"twice":       {{7, 9}, {9, 9}, {9, 9}},
+		"touching":    {{7, 9}, {9, 9}, {5, 8}},
+		"off board":   {{7, 9}, {9, 9}, {10, 0}},
+		"mines touch": {{7, 9}, {8, 9}, {9, 0}},
+	} {
+		if err := CheckSetup(fleet(), ms, 3, 10, false); !errors.Is(err, ErrPlacement) {
+			t.Errorf("%s accepted: %v", name, err)
+		}
+	}
+	if err := CheckSetup(fleet(), [][2]int{{7, 9}, {9, 9}, {5, 8}}, 3, 10, true); err != nil {
+		t.Errorf("touching allowed but rejected: %v", err)
+	}
+	if err := CheckSetup(fleet(), mines(Mines), 0, 10, false); !errors.Is(err, ErrPlacement) {
+		t.Error("mines accepted in a variant without mines")
+	}
+}
+
+func TestRandomSetupValid(t *testing.T) {
+	r := rand.New(rand.NewPCG(3, 4))
+	for i := range 50 {
+		ships, ms := RandomSetup(r, 10, MineCount, i%2 == 0)
+		if err := CheckSetup(ships, ms, MineCount, 10, i%2 == 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestMines(t *testing.T) {
+	g := newGame(Mines)
+	if g.Status != Playing {
+		t.Fatal("not started")
+	}
+	if _, err := g.Fire("a", [][2]int{{5, 5}}, NoShip, time.Now()); !errors.Is(err, ErrShot) {
+		t.Error("shot without a ship accepted")
+	}
+	if _, err := g.Fire("a", [][2]int{{5, 5}}, 10, time.Now()); !errors.Is(err, ErrShot) {
+		t.Error("shot with an unknown ship accepted")
+	}
+	// a fires with the battleship (index 0) onto b's mine at J10.
+	s, err := g.Fire("a", [][2]int{{9, 9}}, 0, time.Now())
+	if err != nil || s[0].Result != Mine || s[0].Ship != 0 || g.Turn != "b" {
+		t.Fatalf("mine: %+v %v turn %s", s, err, g.Turn)
+	}
+	if g.Afloat("a", 0) || len(g.SunkShips("a")) != 1 {
+		t.Error("battleship must be lost")
+	}
+	// b may not shoot at the cells of a's lost battleship, nor next to it.
+	if _, err := g.Fire("b", [][2]int{{2, 0}}, 1, time.Now()); !errors.Is(err, ErrShot) {
+		t.Error("shot at a ship lost on a mine accepted")
+	}
+	if _, err := g.Fire("b", [][2]int{{2, 1}}, 1, time.Now()); !errors.Is(err, ErrShot) {
+		t.Error("shot next to a ship lost on a mine accepted (auto water)")
+	}
+	g.Fire("b", [][2]int{{5, 9}}, 1, time.Now())
+	if _, err := g.Fire("a", [][2]int{{5, 9}}, 0, time.Now()); !errors.Is(err, ErrShot) {
+		t.Error("lost ship fired again")
+	}
+	if _, err := g.Fire("a", [][2]int{{5, 9}}, NoShip, time.Now()); !errors.Is(err, ErrShot) {
+		t.Error("no ship accepted")
+	}
+}
+
+func TestMinesLastShipLoses(t *testing.T) {
+	g := newGame(Mines)
+	// b has sunk all of a's ships but the last submarine (index 9).
+	for _, sh := range fleet()[:9] {
+		for _, c := range sh.Cells() {
+			g.Shots = append(g.Shots, Shot{Seq: len(g.Shots) + 1, Shooter: "b", X: c[0], Y: c[1], Ship: 0, Result: Hit})
+		}
+	}
+	if !g.Afloat("a", 9) || g.Afloat("a", 8) {
+		t.Fatal("setup")
+	}
+	if _, err := g.Fire("a", [][2]int{{7, 9}}, 9, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if g.Status != Finished || g.Winner != "b" {
+		t.Fatalf("status %s winner %s", g.Status, g.Winner)
 	}
 }

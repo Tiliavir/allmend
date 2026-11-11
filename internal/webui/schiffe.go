@@ -133,8 +133,9 @@ func (s *Server) schiffeChallenge(w http.ResponseWriter, r *http.Request, a acco
 // ── board view ────────────────────────────────────────
 
 type cell struct {
+	X, Y  int
 	Coord string
-	Class string // empty, ship, hit, sunk, miss, blocked
+	Class string // empty, ship, mine, hit, sunk, miss, boom, blocked
 	Label string
 	Open  bool // may be shot now
 }
@@ -162,9 +163,20 @@ type gameView struct {
 	Target    board
 	LastShots []string
 	Won       bool
+	// Mines variant: the ships that may fire.
+	Mines   bool
+	Gunners []gunner
 	// setup form
-	Proposal []shipField
-	Size     int
+	Proposal      []shipField
+	ProposalMines []string
+	Size          int
+}
+
+// gunner is a ship that may fire in the Mines variant.
+type gunner struct {
+	Index   int
+	Label   string
+	Checked bool
 }
 
 type shipField struct {
@@ -198,15 +210,23 @@ func makeBoard(g schiffe.Game, owner string, showShips, shootable bool) board {
 		}
 	}
 	blocked := g.Blocked(owner)
+	mines := map[[2]int]bool{}
+	if showShips {
+		for _, m := range g.MinesOf(owner) {
+			mines[m] = true
+		}
+	}
 	for y := range n {
 		row := boardRow{Label: strconv.Itoa(y + 1)}
 		for x := range n {
 			c := [2]int{x, y}
-			k := cell{Coord: schiffe.Coord(x, y), Class: "empty", Label: "offen"}
+			k := cell{X: x, Y: y, Coord: schiffe.Coord(x, y), Class: "empty", Label: "offen"}
 			res, shot := shots[c]
 			switch {
 			case sunk[c]:
 				k.Class, k.Label = "sunk", "versenkt"
+			case shot && res == schiffe.Mine:
+				k.Class, k.Label = "boom", "Seemine explodiert"
 			case shot && res != schiffe.Miss:
 				k.Class, k.Label = "hit", "Treffer"
 			case shot:
@@ -215,6 +235,8 @@ func makeBoard(g schiffe.Game, owner string, showShips, shootable bool) board {
 				k.Class, k.Label = "blocked", "Wasser (neben versenktem Schiff)"
 			case ships[c]:
 				k.Class, k.Label = "ship", "Schiff"
+			case mines[c]:
+				k.Class, k.Label = "mine", "Seemine"
 			default:
 				k.Open = shootable
 			}
@@ -238,7 +260,13 @@ func (s *Server) schiffeGame(w http.ResponseWriter, r *http.Request, a account.A
 	s.renderGame(w, r, a, g, http.StatusOK, "", nil)
 }
 
-func (s *Server) renderGame(w http.ResponseWriter, r *http.Request, a account.Account, g schiffe.Game, status int, errMsg string, proposal []schiffe.Ship) {
+// setup is a fleet with mines as entered or proposed for the setup form.
+type setup struct {
+	Ships []schiffe.Ship
+	Mines [][2]int
+}
+
+func (s *Server) renderGame(w http.ResponseWriter, r *http.Request, a account.Account, g schiffe.Game, status int, errMsg string, proposal *setup) {
 	names, _, err := s.names(r)
 	if err != nil {
 		s.fail(w, r, err)
@@ -246,7 +274,8 @@ func (s *Server) renderGame(w http.ResponseWriter, r *http.Request, a account.Ac
 	}
 	opp := g.Opponent(a.ID)
 	v := gameView{Game: g, Me: a.ID, Opponent: names[opp], MyTurn: g.Status == schiffe.Playing && g.Turn == a.ID,
-		Placed: g.FleetOf(a.ID) != nil, Salvo: g.Variant == schiffe.Salvo, Won: g.Winner == a.ID, Size: g.Variant.Size()}
+		Placed: g.FleetOf(a.ID) != nil, Salvo: g.Variant == schiffe.Salvo, Won: g.Winner == a.ID, Size: g.Variant.Size(),
+		Mines: g.Variant.Mines() > 0}
 	for _, i := range schiffe.Variants {
 		if i.ID == g.Variant {
 			v.Variant = i
@@ -254,14 +283,21 @@ func (s *Server) renderGame(w http.ResponseWriter, r *http.Request, a account.Ac
 	}
 	if g.Status == schiffe.Setup && !v.Placed {
 		if proposal == nil {
-			proposal = schiffe.Proposal(g.Variant, g.Touching)
+			ships, mines := schiffe.Proposal(g.Variant, g.Touching)
+			proposal = &setup{ships, mines}
 		}
-		for _, sh := range proposal {
+		for _, sh := range proposal.Ships {
 			v.Proposal = append(v.Proposal, shipField{Name: schiffe.ShipNames[sh.Size], Start: schiffe.Coord(sh.X, sh.Y), Size: sh.Size, Horizontal: sh.Horizontal})
 		}
-		v.Own = makeBoard(schiffe.Game{Variant: g.Variant, PlayerA: a.ID, FleetA: proposal}, a.ID, true, false)
+		for _, m := range proposal.Mines {
+			v.ProposalMines = append(v.ProposalMines, schiffe.Coord(m[0], m[1]))
+		}
+		v.Own = makeBoard(schiffe.Game{Variant: g.Variant, PlayerA: a.ID, FleetA: proposal.Ships, MinesA: proposal.Mines}, a.ID, true, false)
 	} else {
 		v.Shots = g.ShotsPerTurn(a.ID)
+		if v.Mines && v.MyTurn {
+			v.Gunners = gunners(g, a.ID)
+		}
 		v.Own = makeBoard(g, a.ID, true, false)
 		// After the game both fleets are revealed.
 		v.Target = makeBoard(g, opp, g.Status == schiffe.Finished, v.MyTurn)
@@ -271,7 +307,7 @@ func (s *Server) renderGame(w http.ResponseWriter, r *http.Request, a account.Ac
 			if sh.Shooter != a.ID {
 				who = names[sh.Shooter]
 			}
-			v.LastShots = append(v.LastShots, fmt.Sprintf("%s: %s – %s", who, schiffe.Coord(sh.X, sh.Y), map[schiffe.Result]string{schiffe.Miss: "Wasser", schiffe.Hit: "Treffer", schiffe.Sunk: "Treffer versenkt"}[sh.Result]))
+			v.LastShots = append(v.LastShots, fmt.Sprintf("%s: %s – %s", who, schiffe.Coord(sh.X, sh.Y), shotText(g, sh)))
 		}
 	}
 	p := Page{Title: "Schiffe versenken", Module: account.Schiffe, Error: errMsg, Data: v,
@@ -279,7 +315,58 @@ func (s *Server) renderGame(w http.ResponseWriter, r *http.Request, a account.Ac
 	s.render(w, r, status, "schiffe/game", p)
 }
 
-func (s *Server) schiffeGameErr(w http.ResponseWriter, r *http.Request, a account.Account, gameID string, err error, proposal []schiffe.Ship) {
+// shotText describes a shot's result; a mine names the ship it sank.
+func shotText(g schiffe.Game, sh schiffe.Shot) string {
+	switch sh.Result {
+	case schiffe.Miss:
+		return "Wasser"
+	case schiffe.Hit:
+		return "Treffer"
+	case schiffe.Sunk:
+		return "Treffer versenkt"
+	case schiffe.Mine:
+		fleet := g.FleetOf(sh.Shooter)
+		if sh.Ship >= 0 && sh.Ship < len(fleet) {
+			return "Seemine! " + schiffe.ShipNames[fleet[sh.Ship].Size] + " gesunken"
+		}
+		return "Seemine!"
+	}
+	return string(sh.Result)
+}
+
+// gunners lists p's ships afloat. Preselected is the ship p fired with last,
+// if it still floats, else the smallest one: a mine then costs the least.
+func gunners(g schiffe.Game, p string) []gunner {
+	last := schiffe.NoShip
+	for _, sh := range g.Shots {
+		if sh.Shooter == p {
+			last = sh.Ship
+		}
+	}
+	fleet := g.FleetOf(p)
+	var out []gunner
+	pick := -1
+	for i, sh := range fleet {
+		if !g.Afloat(p, i) {
+			continue
+		}
+		out = append(out, gunner{Index: i, Label: fmt.Sprintf("%s (%s)", schiffe.ShipNames[sh.Size], schiffe.Coord(sh.X, sh.Y))})
+		if pick < 0 || sh.Size <= fleet[out[pick].Index].Size {
+			pick = len(out) - 1
+		}
+	}
+	for j, o := range out {
+		if o.Index == last {
+			pick = j
+		}
+	}
+	if pick >= 0 {
+		out[pick].Checked = true
+	}
+	return out
+}
+
+func (s *Server) schiffeGameErr(w http.ResponseWriter, r *http.Request, a account.Account, gameID string, err error, proposal *setup) {
 	g, lerr := s.Schiffe.Load(r.Context(), a, gameID)
 	if errors.Is(lerr, schiffe.ErrNotFound) {
 		s.status(w, r, http.StatusNotFound)
@@ -315,11 +402,19 @@ func (s *Server) schiffePlace(w http.ResponseWriter, r *http.Request, a account.
 		return
 	}
 	ships, err := schiffe.ParseFleet(r.PostForm["start"], r.PostForm["richtung"], g.Variant.Size())
+	var mines [][2]int
 	if err == nil {
-		g, err = s.Schiffe.Place(r.Context(), a, id, ships)
+		mines, err = schiffe.ParseMines(r.PostForm["mine"], g.Variant.Mines(), g.Variant.Size())
+	}
+	if err == nil {
+		g, err = s.Schiffe.Place(r.Context(), a, id, ships, mines)
 	}
 	if err != nil {
-		s.schiffeGameErr(w, r, a, id, err, ships)
+		var keep *setup
+		if ships != nil && len(mines) == g.Variant.Mines() {
+			keep = &setup{ships, mines} // show what was entered, with the error
+		}
+		s.schiffeGameErr(w, r, a, id, err, keep)
 		return
 	}
 	s.hub.publish(id, g.Version)
@@ -350,7 +445,16 @@ func (s *Server) schiffeFire(w http.ResponseWriter, r *http.Request, a account.A
 		}
 		cells = append(cells, [2]int{x, y})
 	}
-	g, shots, err := s.Schiffe.Fire(r.Context(), a, id, cells)
+	ship := schiffe.NoShip
+	if v, ok := r.PostForm["schiff"]; ok {
+		n, err := strconv.Atoi(v[0])
+		if err != nil || len(v) != 1 {
+			s.schiffeGameErr(w, r, a, id, fmt.Errorf("%w: unbekanntes Schiff", schiffe.ErrShot), nil)
+			return
+		}
+		ship = n
+	}
+	g, shots, err := s.Schiffe.Fire(r.Context(), a, id, cells, ship)
 	if err != nil {
 		s.schiffeGameErr(w, r, a, id, err, nil)
 		return
@@ -361,10 +465,13 @@ func (s *Server) schiffeFire(w http.ResponseWriter, r *http.Request, a account.A
 		if i > 0 {
 			msg += ", "
 		}
-		msg += schiffe.Coord(sh.X, sh.Y) + ": " + map[schiffe.Result]string{schiffe.Miss: "Wasser", schiffe.Hit: "Treffer", schiffe.Sunk: "Treffer versenkt!"}[sh.Result]
+		msg += schiffe.Coord(sh.X, sh.Y) + ": " + shotText(g, sh)
 	}
-	if g.Status == schiffe.Finished {
+	switch {
+	case g.Status == schiffe.Finished && g.Winner == a.ID:
 		msg += " – gewonnen!"
+	case g.Status == schiffe.Finished:
+		msg += " – das war dein letztes Schiff, verloren."
 	}
 	s.redirect(w, r, "/schiffe/"+id, msg)
 }

@@ -304,11 +304,14 @@ func (s *seeder) places(f *family) error {
 // ── schiffe ───────────────────────────────────────────
 
 func (s *seeder) schiffe(f *family) error {
-	// A finished classic game and a salvo game in the middle.
+	// A finished classic game, a salvo game and a sea-mines game in the middle.
 	if err := s.game(f.mia, f.anna, schiffe.Classic, -1); err != nil {
 		return err
 	}
-	return s.game(f.anna, f.ben, schiffe.Salvo, 6)
+	if err := s.game(f.anna, f.ben, schiffe.Salvo, 6); err != nil {
+		return err
+	}
+	return s.game(f.ben, f.anna, schiffe.Mines, 14)
 }
 
 // game plays turns (−1: until the end) with random but legal shots.
@@ -319,7 +322,8 @@ func (s *seeder) game(a, b account.Account, v schiffe.Variant, turns int) error 
 	}
 	n := v.Size()
 	for _, p := range []account.Account{a, b} {
-		if g, err = s.Schiffe.Place(s.ctx, p, g.ID, schiffe.RandomFleet(s.rnd, n, false)); err != nil {
+		ships, mines := schiffe.RandomSetup(s.rnd, n, v.Mines(), false)
+		if g, err = s.Schiffe.Place(s.ctx, p, g.ID, ships, mines); err != nil {
 			return err
 		}
 	}
@@ -331,6 +335,11 @@ func (s *seeder) game(a, b account.Account, v schiffe.Variant, turns int) error 
 		for _, sh := range g.ShotsAt(target) {
 			blocked[[2]int{sh.X, sh.Y}] = true
 		}
+		for _, sh := range g.SunkShips(target) {
+			for _, c := range sh.Cells() {
+				blocked[c] = true // also ships lost on a mine
+			}
+		}
 		want := min(g.ShotsPerTurn(p.ID), n*n-len(blocked))
 		var cells [][2]int
 		for len(cells) < want {
@@ -340,7 +349,16 @@ func (s *seeder) game(a, b account.Account, v schiffe.Variant, turns int) error 
 				cells = append(cells, c)
 			}
 		}
-		if g, _, err = s.Schiffe.Fire(s.ctx, p, g.ID, cells); err != nil {
+		ship := schiffe.NoShip
+		if v.Mines() > 0 {
+			for i := range g.FleetOf(p.ID) {
+				if g.Afloat(p.ID, i) {
+					ship = i // the largest ship afloat fires
+					break
+				}
+			}
+		}
+		if g, _, err = s.Schiffe.Fire(s.ctx, p, g.ID, cells, ship); err != nil {
 			return err
 		}
 	}

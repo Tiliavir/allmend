@@ -19,6 +19,7 @@ const (
 	Streak  Variant = "treffer-serie" // a hit lets the shooter fire again
 	Salvo   Variant = "salve"         // shots per turn = size of own largest ship afloat
 	BigSea  Variant = "grosses-meer"  // 12×12, alternate shots
+	Mines   Variant = "seeminen"      // three sea mines per side; a mine sinks the firing ship
 )
 
 // VariantInfo describes a variant for the UI.
@@ -33,6 +34,18 @@ var Variants = []VariantInfo{
 	{Streak, "Treffer-Serie", "Wer trifft, schießt gleich nochmals."},
 	{Salvo, "Salven-Modus", "Pro Zug so viele Schüsse, wie dein größtes Schiff noch Felder hat."},
 	{BigSea, "Großes Meer", "12 × 12 Felder, abwechselnd ein Schuss."},
+	{Mines, "Seeminen", "Jede Seite versteckt zusätzlich drei Seeminen. Du sagst an, mit welchem Schiff du feuerst – triffst du eine Mine, ist dieses Schiff verloren."},
+}
+
+// MineCount is the number of sea mines per side in the Mines variant.
+const MineCount = 3
+
+// Mines returns how many sea mines each side hides.
+func (v Variant) Mines() int {
+	if v == Mines {
+		return MineCount
+	}
+	return 0
 }
 
 // KnownVariant reports whether v exists.
@@ -89,6 +102,13 @@ var ErrPlacement = errors.New("ungültige Aufstellung")
 // CheckFleet validates a complete fleet for a board of size n. With touching
 // false, ships may not touch, not even diagonally.
 func CheckFleet(ships []Ship, n int, touching bool) error {
+	return CheckSetup(ships, nil, 0, n, touching)
+}
+
+// CheckSetup validates a fleet plus exactly wantMines sea mines. Mines are
+// single cells; they may not lie on a ship or on each other, and with
+// touching false nothing may touch, not even diagonally.
+func CheckSetup(ships []Ship, mines [][2]int, wantMines, n int, touching bool) error {
 	want := slices.Clone(Fleet)
 	got := make([]int, len(ships))
 	for i, s := range ships {
@@ -99,24 +119,53 @@ func CheckFleet(ships []Ship, n int, touching bool) error {
 	if !slices.Equal(want, got) {
 		return fmt.Errorf("%w: die Flotte muss aus 1 Schlachtschiff (5), 2 Kreuzern (4), 3 Zerstörern (3) und 4 U-Booten (2) bestehen", ErrPlacement)
 	}
+	if len(mines) != wantMines {
+		return fmt.Errorf("%w: genau %d Seeminen erwartet", ErrPlacement, wantMines)
+	}
+	return layout(withMines(ships, mines), n, touching)
+}
+
+// withMines appends mines as one-cell objects (Size 1).
+func withMines(ships []Ship, mines [][2]int) []Ship {
+	all := slices.Clone(ships)
+	for _, m := range mines {
+		all = append(all, Ship{Size: 1, X: m[0], Y: m[1], Horizontal: true})
+	}
+	return all
+}
+
+func objName(s Ship) string {
+	if s.Size == 1 {
+		return "Seemine"
+	}
+	return ShipNames[s.Size]
+}
+
+// layout checks that objects lie on the board, do not overlap and, unless
+// touching is allowed, do not touch.
+func layout(objs []Ship, n int, touching bool) error {
 	occ := map[[2]int]int{}
-	for i, s := range ships {
+	for i, s := range objs {
 		for _, c := range s.Cells() {
 			if c[0] < 0 || c[1] < 0 || c[0] >= n || c[1] >= n {
-				return fmt.Errorf("%w: %s %s ragt über den Rand", ErrPlacement, ShipNames[s.Size], Coord(s.X, s.Y))
+				return fmt.Errorf("%w: %s %s ragt über den Rand", ErrPlacement, objName(s), Coord(s.X, s.Y))
 			}
-			if _, ok := occ[c]; ok {
-				return fmt.Errorf("%w: Schiffe überlappen bei %s", ErrPlacement, Coord(c[0], c[1]))
+			if j, ok := occ[c]; ok {
+				return fmt.Errorf("%w: %s und %s überlappen bei %s", ErrPlacement, objName(objs[j]), objName(s), Coord(c[0], c[1]))
 			}
 			occ[c] = i
 		}
 	}
-	if !touching {
-		for c, i := range occ {
+	if touching {
+		return nil
+	}
+	// Deterministic order for a stable message.
+	for i, s := range objs {
+		for _, c := range s.Cells() {
 			for dx := -1; dx <= 1; dx++ {
 				for dy := -1; dy <= 1; dy++ {
 					if j, ok := occ[[2]int{c[0] + dx, c[1] + dy}]; ok && j != i {
-						return fmt.Errorf("%w: Schiffe berühren sich bei %s", ErrPlacement, Coord(c[0], c[1]))
+						return fmt.Errorf("%w: %s und %s berühren sich bei %s", ErrPlacement, objName(s), objName(objs[j]), Coord(c[0], c[1]))
 					}
 				}
 			}
@@ -127,20 +176,31 @@ func CheckFleet(ships []Ship, n int, touching bool) error {
 
 // RandomFleet places the fleet at random; it restarts when stuck.
 func RandomFleet(r *rand.Rand, n int, touching bool) []Ship {
+	ships, _ := RandomSetup(r, n, 0, touching)
+	return ships
+}
+
+// RandomSetup places the fleet and the given number of mines at random; it
+// restarts when stuck.
+func RandomSetup(r *rand.Rand, n, mines int, touching bool) ([]Ship, [][2]int) {
+	sizes := slices.Clone(Fleet)
+	for range mines {
+		sizes = append(sizes, 1)
+	}
 	for {
-		var ships []Ship
+		var objs []Ship
 		ok := true
-		for _, size := range Fleet {
+		for _, size := range sizes {
 			placed := false
 			for range 200 {
-				s := Ship{Size: size, Horizontal: r.IntN(2) == 0}
+				s := Ship{Size: size, Horizontal: size == 1 || r.IntN(2) == 0}
 				if s.Horizontal {
 					s.X, s.Y = r.IntN(n-size+1), r.IntN(n)
 				} else {
 					s.X, s.Y = r.IntN(n), r.IntN(n-size+1)
 				}
-				if checkPartial(append(slices.Clone(ships), s), n, touching) {
-					ships = append(ships, s)
+				if layout(append(slices.Clone(objs), s), n, touching) == nil {
+					objs = append(objs, s)
 					placed = true
 					break
 				}
@@ -151,37 +211,14 @@ func RandomFleet(r *rand.Rand, n int, touching bool) []Ship {
 			}
 		}
 		if ok {
-			return ships
+			ships := objs[:len(Fleet)]
+			var ms [][2]int
+			for _, m := range objs[len(Fleet):] {
+				ms = append(ms, [2]int{m.X, m.Y})
+			}
+			return ships, ms
 		}
 	}
-}
-
-func checkPartial(ships []Ship, n int, touching bool) bool {
-	occ := map[[2]int]int{}
-	for i, s := range ships {
-		for _, c := range s.Cells() {
-			if c[0] < 0 || c[1] < 0 || c[0] >= n || c[1] >= n {
-				return false
-			}
-			if _, ok := occ[c]; ok {
-				return false
-			}
-			occ[c] = i
-		}
-	}
-	if touching {
-		return true
-	}
-	for c, i := range occ {
-		for dx := -1; dx <= 1; dx++ {
-			for dy := -1; dy <= 1; dy++ {
-				if j, ok := occ[[2]int{c[0] + dx, c[1] + dy}]; ok && j != i {
-					return false
-				}
-			}
-		}
-	}
-	return true
 }
 
 // Coord names a cell like "B7" (column letter, row number).
