@@ -50,6 +50,21 @@ func (p Page) Initial() string {
 	return strings.ToUpper(string(r[0]))
 }
 
+// DarkMedia is the media attribute of the dark stylesheet: always for
+// "dark", never for "light" (empty: not linked), else the device setting.
+func (p Page) DarkMedia() string {
+	if p.Account == nil {
+		return "(prefers-color-scheme: dark)"
+	}
+	switch p.Account.Theme {
+	case account.ThemeDark:
+		return "all"
+	case account.ThemeLight:
+		return ""
+	}
+	return "(prefers-color-scheme: dark)"
+}
+
 // NavItem is one module in the header.
 type NavItem struct {
 	Name, Path string
@@ -182,6 +197,17 @@ var funcs = template.FuncMap{
 			return "gesperrt"
 		}
 		return string(s)
+	},
+	"themeLabel": func(t account.Theme) string {
+		switch t {
+		case account.ThemeAuto:
+			return "Automatisch (wie das Gerät)"
+		case account.ThemeLight:
+			return "Hell"
+		case account.ThemeDark:
+			return "Dunkel"
+		}
+		return string(t)
 	},
 }
 

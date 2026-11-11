@@ -19,7 +19,7 @@ func ausgabenSetup(t *testing.T) (*store.Store, *ausgaben.Service, map[string]ac
 	now := time.Date(2026, 3, 15, 10, 0, 0, 0, time.UTC)
 	acc := map[string]account.Account{}
 	for _, n := range []string{"anna", "ben", "kim", "zoe"} {
-		a := account.Account{ID: n, Email: n + "@example.org", Name: n, IsAdmin: n == "anna", Status: account.Active, CreatedAt: now, UpdatedAt: now}
+		a := account.Account{ID: n, Email: n + "@example.org", Name: n, IsAdmin: n == "anna", Status: account.Active, Theme: account.ThemeAuto, CreatedAt: now, UpdatedAt: now}
 		if n != "zoe" {
 			a.Modules = []account.Module{account.Ausgaben}
 		}

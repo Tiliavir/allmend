@@ -60,6 +60,19 @@ const (
 	Disabled Status = "disabled" // may not log in; sessions are deleted
 )
 
+// Theme is the colour scheme an account chose.
+type Theme string
+
+// Themes. Auto follows the device setting.
+const (
+	ThemeAuto  Theme = "auto"
+	ThemeLight Theme = "light"
+	ThemeDark  Theme = "dark"
+)
+
+// Themes lists the choices in display order.
+var Themes = []Theme{ThemeAuto, ThemeLight, ThemeDark}
+
 // Account is a person using Allmend.
 type Account struct {
 	ID                 string
@@ -71,6 +84,7 @@ type Account struct {
 	PasswordHash       string // empty: no local login
 	PasswordMustChange bool
 	Modules            []Module
+	Theme              Theme
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 }
@@ -97,6 +111,8 @@ var (
 	ErrInvalidEmail = errors.New("not a valid e-mail address")
 	ErrUnknownMod   = errors.New("unknown module")
 	ErrLastAdmin    = errors.New("the last active admin cannot lose admin rights or be disabled")
+	ErrUnknownTheme = errors.New("unknown theme")
+	ErrHasData      = errors.New("account still owns or shares data")
 )
 
 // NormalizeEmail validates and lower-cases a plain address ("a@b.c").
@@ -118,4 +134,8 @@ type Repository interface {
 	Insert(ctx context.Context, a Account) error
 	// Update writes all fields including Modules; it refuses to leave no active admin.
 	Update(ctx context.Context, a Account) error
+	// Delete removes an account with its sessions, module grants and page
+	// grants. Any other data that refers to it makes Delete fail with
+	// ErrHasData; nothing is deleted then.
+	Delete(ctx context.Context, id string) error
 }

@@ -20,3 +20,4 @@
 | [Public demo as a static export on GitHub Pages](adr/ADR-20261109-demo-pages.md) | Proposed |
 | [Ausgaben (shared expenses, Splitwise replacement)](adr/ADR-20261109-ausgaben.md) | Proposed |
 | [Schiffe versenken: Seeminen and drag-and-drop setup](adr/ADR-20261111-sea-mines.md) | Proposed |
+| [Deleting accounts, colour scheme per account](adr/ADR-20261111-account-deletion-and-theme.md) | Proposed |

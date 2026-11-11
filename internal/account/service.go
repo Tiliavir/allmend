@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"slices"
 	"sync"
 	"time"
 
@@ -36,7 +37,7 @@ var (
 	ErrLoginFailed  = errors.New("login failed")
 	ErrForbidden    = errors.New("forbidden")
 	ErrWeakPassword = errors.New("password too short")
-	ErrSelf         = errors.New("admins cannot disable themselves")
+	ErrSelf         = errors.New("admins cannot disable or delete themselves")
 )
 
 // MinPasswordLength for local passwords.
@@ -54,7 +55,7 @@ func (s *Service) EnsureAdmin(ctx context.Context) (Account, error) {
 	a, err := s.Repo.ByEmail(ctx, s.AdminEmail)
 	now := s.now()
 	if errors.Is(err, ErrNotFound) {
-		a = Account{ID: id.New(), Email: s.AdminEmail, IsAdmin: true, Status: Active, CreatedAt: now, UpdatedAt: now}
+		a = Account{ID: id.New(), Email: s.AdminEmail, IsAdmin: true, Status: Active, Theme: ThemeAuto, CreatedAt: now, UpdatedAt: now}
 		for _, m := range Modules {
 			a.Modules = append(a.Modules, m.ID)
 		}
@@ -186,7 +187,7 @@ func (s *Service) Invite(ctx context.Context, actor Account, c Changes) (Account
 		return Account{}, err
 	}
 	now := s.now()
-	a := Account{ID: id.New(), Email: email, Name: c.Name, IsAdmin: c.IsAdmin, Status: Invited, Modules: c.Modules, CreatedAt: now, UpdatedAt: now}
+	a := Account{ID: id.New(), Email: email, Name: c.Name, IsAdmin: c.IsAdmin, Status: Invited, Modules: c.Modules, Theme: ThemeAuto, CreatedAt: now, UpdatedAt: now}
 	return a, s.Repo.Insert(ctx, a)
 }
 
@@ -215,6 +216,27 @@ func (s *Service) Update(ctx context.Context, actor Account, accountID string, c
 		a.GoogleSub = "" // a new address must be confirmed by a new Google login
 	}
 	a.Email, a.Name, a.IsAdmin, a.Status, a.Modules, a.UpdatedAt = email, c.Name, c.IsAdmin, c.Status, c.Modules, s.now()
+	return a, s.Repo.Update(ctx, a)
+}
+
+// Delete removes an account that has no data of its own (see
+// Repository.Delete). Admins cannot delete themselves.
+func (s *Service) Delete(ctx context.Context, actor Account, accountID string) error {
+	if err := s.requireAdmin(actor); err != nil {
+		return err
+	}
+	if accountID == actor.ID {
+		return ErrSelf
+	}
+	return s.Repo.Delete(ctx, accountID)
+}
+
+// SetTheme stores the account's own colour scheme.
+func (s *Service) SetTheme(ctx context.Context, a Account, t Theme) (Account, error) {
+	if !slices.Contains(Themes, t) {
+		return a, fmt.Errorf("%w: %q", ErrUnknownTheme, t)
+	}
+	a.Theme, a.UpdatedAt = t, s.now()
 	return a, s.Repo.Update(ctx, a)
 }
 

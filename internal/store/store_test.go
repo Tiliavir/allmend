@@ -88,14 +88,14 @@ func TestAccounts(t *testing.T) {
 	ctx := context.Background()
 	r := s.Accounts()
 	now := time.Now().UTC()
-	admin := account.Account{ID: "a1", Email: "admin@example.org", IsAdmin: true, Status: account.Active, Modules: []account.Module{account.Velo}, CreatedAt: now, UpdatedAt: now}
+	admin := account.Account{ID: "a1", Email: "admin@example.org", IsAdmin: true, Status: account.Active, Theme: account.ThemeAuto, Modules: []account.Module{account.Velo}, CreatedAt: now, UpdatedAt: now}
 	if err := r.Insert(ctx, admin); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.Insert(ctx, account.Account{ID: "a2", Email: "ADMIN@example.org", Status: account.Invited, CreatedAt: now, UpdatedAt: now}); !errors.Is(err, account.ErrEmailTaken) {
+	if err := r.Insert(ctx, account.Account{ID: "a2", Email: "ADMIN@example.org", Status: account.Invited, Theme: account.ThemeAuto, CreatedAt: now, UpdatedAt: now}); !errors.Is(err, account.ErrEmailTaken) {
 		t.Fatalf("duplicate e-mail: %v", err)
 	}
-	if err := r.Insert(ctx, account.Account{ID: "a3", Email: "x@example.org", Status: account.Active, Modules: []account.Module{"nope"}, CreatedAt: now, UpdatedAt: now}); !errors.Is(err, account.ErrUnknownMod) {
+	if err := r.Insert(ctx, account.Account{ID: "a3", Email: "x@example.org", Status: account.Active, Theme: account.ThemeAuto, Modules: []account.Module{"nope"}, CreatedAt: now, UpdatedAt: now}); !errors.Is(err, account.ErrUnknownMod) {
 		t.Fatalf("unknown module: %v", err)
 	}
 	admin.IsAdmin = false
@@ -112,7 +112,7 @@ func TestSessionsAndFlows(t *testing.T) {
 	s, _ := open(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	_ = s.Accounts().Insert(ctx, account.Account{ID: "a1", Email: "a@example.org", IsAdmin: true, Status: account.Active, CreatedAt: now, UpdatedAt: now})
+	_ = s.Accounts().Insert(ctx, account.Account{ID: "a1", Email: "a@example.org", IsAdmin: true, Status: account.Active, Theme: account.ThemeAuto, CreatedAt: now, UpdatedAt: now})
 	r := s.Sessions()
 	if err := r.Create(ctx, "h1", "a1", now, now.Add(time.Hour)); err != nil {
 		t.Fatal(err)
@@ -162,8 +162,8 @@ func TestPages(t *testing.T) {
 	s, _ := open(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	owner := account.Account{ID: "o", Email: "o@example.org", IsAdmin: true, Status: account.Active, CreatedAt: now, UpdatedAt: now}
-	other := account.Account{ID: "x", Email: "x@example.org", Status: account.Active, CreatedAt: now, UpdatedAt: now}
+	owner := account.Account{ID: "o", Email: "o@example.org", IsAdmin: true, Status: account.Active, Theme: account.ThemeAuto, CreatedAt: now, UpdatedAt: now}
+	other := account.Account{ID: "x", Email: "x@example.org", Status: account.Active, Theme: account.ThemeAuto, CreatedAt: now, UpdatedAt: now}
 	_ = s.Accounts().Insert(ctx, owner)
 	_ = s.Accounts().Insert(ctx, other)
 	svc := pages.Service{Repo: s.Pages()}
@@ -273,8 +273,8 @@ func TestPageTree(t *testing.T) {
 	s, _ := open(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	owner := account.Account{ID: "o", Email: "o@example.org", IsAdmin: true, Status: account.Active, CreatedAt: now, UpdatedAt: now}
-	other := account.Account{ID: "x", Email: "x@example.org", Status: account.Active, CreatedAt: now, UpdatedAt: now}
+	owner := account.Account{ID: "o", Email: "o@example.org", IsAdmin: true, Status: account.Active, Theme: account.ThemeAuto, CreatedAt: now, UpdatedAt: now}
+	other := account.Account{ID: "x", Email: "x@example.org", Status: account.Active, Theme: account.ThemeAuto, CreatedAt: now, UpdatedAt: now}
 	_ = s.Accounts().Insert(ctx, owner)
 	_ = s.Accounts().Insert(ctx, other)
 	svc := pages.Service{Repo: s.Pages()}
@@ -381,7 +381,7 @@ func TestCommuteConflict(t *testing.T) {
 	s, _ := open(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	a := account.Account{ID: "a", Email: "a@example.org", IsAdmin: true, Status: account.Active, CreatedAt: now, UpdatedAt: now}
+	a := account.Account{ID: "a", Email: "a@example.org", IsAdmin: true, Status: account.Active, Theme: account.ThemeAuto, CreatedAt: now, UpdatedAt: now}
 	_ = s.Accounts().Insert(ctx, a)
 	svc := commute.Service{Repo: s.Commute()}
 	y, err := svc.Create(ctx, a, commute.Year{Year: 2026, CarDistKm: 5})

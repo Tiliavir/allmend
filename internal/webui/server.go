@@ -78,6 +78,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.Handle("GET /konto", s.auth(s.konto))
 	mux.Handle("POST /konto/passwort", s.auth(s.changePassword))
+	mux.Handle("POST /konto/darstellung", s.auth(s.changeTheme))
 
 	mux.Handle("GET /verwaltung", s.admin(s.adminIndex))
 	mux.Handle("GET /verwaltung/konten", s.admin(s.adminAccounts))
@@ -86,6 +87,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /verwaltung/konten/{id}", s.admin(s.adminAccountSave))
 	mux.Handle("POST /verwaltung/konten/{id}/passwort", s.admin(s.adminResetPassword))
 	mux.Handle("POST /verwaltung/konten/{id}/passwort/entfernen", s.admin(s.adminRemovePassword))
+	mux.Handle("POST /verwaltung/konten/{id}/loeschen", s.admin(s.adminAccountDelete))
 	mux.Handle("GET /verwaltung/links", s.admin(s.adminLinks))
 	mux.Handle("POST /verwaltung/links", s.admin(s.adminLinkCreate))
 	mux.Handle("GET /verwaltung/links/{id}", s.admin(s.adminLink))

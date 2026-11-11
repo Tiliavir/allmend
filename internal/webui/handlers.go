@@ -176,10 +176,28 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 
 // ── own account ───────────────────────────────────────
 
-type kontoData struct{ MinLength int }
+type kontoData struct {
+	MinLength int
+	Themes    []account.Theme
+}
+
+func newKontoData() kontoData { return kontoData{account.MinPasswordLength, account.Themes} }
 
 func (s *Server) konto(w http.ResponseWriter, r *http.Request, _ account.Account) {
-	s.render(w, r, http.StatusOK, "konto", Page{Title: "Konto", Data: kontoData{account.MinPasswordLength}})
+	s.render(w, r, http.StatusOK, "konto", Page{Title: "Konto", Data: newKontoData()})
+}
+
+func (s *Server) changeTheme(w http.ResponseWriter, r *http.Request, a account.Account) {
+	_, err := s.Accounts.SetTheme(r.Context(), a, account.Theme(r.PostFormValue("theme")))
+	if errors.Is(err, account.ErrUnknownTheme) {
+		s.render(w, r, http.StatusUnprocessableEntity, "konto", Page{Title: "Konto", Error: "Bitte wähle eine der Darstellungen.", Data: newKontoData()})
+		return
+	}
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.redirect(w, r, "/konto", "Darstellung gespeichert.")
 }
 
 func (s *Server) changePassword(w http.ResponseWriter, r *http.Request, a account.Account) {
@@ -197,7 +215,7 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request, a accoun
 		s.redirect(w, r, "/konto", "Passwort gespeichert.")
 		return
 	}
-	s.render(w, r, http.StatusUnprocessableEntity, "konto", Page{Title: "Konto", Error: msg, Data: kontoData{account.MinPasswordLength}})
+	s.render(w, r, http.StatusUnprocessableEntity, "konto", Page{Title: "Konto", Error: msg, Data: newKontoData()})
 }
 
 // ── admin: accounts ───────────────────────────────────
@@ -209,6 +227,7 @@ type accountsData struct {
 	Target     account.Account
 	Statuses   []account.Status
 	OneTime    string
+	Self       bool // Target is the acting admin
 }
 
 func (s *Server) adminIndex(w http.ResponseWriter, r *http.Request, _ account.Account) {
@@ -253,7 +272,9 @@ func accountError(err error) string {
 	case errors.Is(err, account.ErrLastAdmin):
 		return "Es muss immer mindestens ein aktiver Admin bleiben."
 	case errors.Is(err, account.ErrSelf):
-		return "Du kannst dich nicht selbst sperren."
+		return "Du kannst dich nicht selbst sperren oder löschen."
+	case errors.Is(err, account.ErrHasData):
+		return "Das Konto hat noch Daten (z. B. Touren, Seiten, Spiele oder Ausgaben). Sperre es stattdessen."
 	}
 	return ""
 }
@@ -297,6 +318,7 @@ func (s *Server) renderAccount(w http.ResponseWriter, r *http.Request, status in
 	}
 	s.render(w, r, status, "admin/account", Page{Title: a.DisplayName(), Error: errMsg, Data: accountsData{
 		Target: a, AllModules: account.Modules, Selected: sel, OneTime: oneTime,
+		Self:     currentAccount(r) != nil && currentAccount(r).ID == a.ID,
 		Statuses: []account.Status{account.Invited, account.Active, account.Disabled},
 	}})
 }
@@ -357,6 +379,29 @@ func (s *Server) adminRemovePassword(w http.ResponseWriter, r *http.Request, act
 		return
 	}
 	s.redirect(w, r, "/verwaltung/konten/"+id, "Passwort-Anmeldung entfernt.")
+}
+
+func (s *Server) adminAccountDelete(w http.ResponseWriter, r *http.Request, actor account.Account) {
+	id := r.PathValue("id")
+	if r.PostFormValue("confirm") != "1" {
+		s.renderAccount(w, r, http.StatusUnprocessableEntity, id, "Bitte bestätige das Löschen.", "")
+		return
+	}
+	err := s.Accounts.Delete(r.Context(), actor, id)
+	if errors.Is(err, account.ErrNotFound) {
+		s.status(w, r, http.StatusNotFound)
+		return
+	}
+	if msg := accountError(err); msg != "" {
+		s.renderAccount(w, r, http.StatusUnprocessableEntity, id, msg, "")
+		return
+	}
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	slog.Info("account deleted", "account", id, "by", actor.ID)
+	s.redirect(w, r, "/verwaltung/konten", "Konto gelöscht.")
 }
 
 // ── admin: links ──────────────────────────────────────

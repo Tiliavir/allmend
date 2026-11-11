@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/fs"
 	"math/big"
@@ -259,6 +260,88 @@ func TestLastAdminProtected(t *testing.T) {
 	a, _ := e.st.Accounts().ByEmail(context.Background(), adminEmail)
 	if r := e.post(admin, "/verwaltung/konten/"+a.ID, url.Values{"email": {adminEmail}, "status": {"active"}}); r.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("removing last admin: %d", r.StatusCode)
+	}
+}
+
+func TestTheme(t *testing.T) {
+	e := newEnv(t)
+	admin := e.loginAdmin()
+	if _, body := e.get(admin, "/konto"); !strings.Contains(body, `href="/static/dark.css" media="(prefers-color-scheme: dark)"`) {
+		t.Error("auto: dark.css should follow the device")
+	}
+	if r := e.post(admin, "/konto/darstellung", url.Values{"theme": {"dark"}}); r.StatusCode != http.StatusSeeOther {
+		t.Fatalf("dark: %d", r.StatusCode)
+	}
+	if _, body := e.get(admin, "/"); !strings.Contains(body, `href="/static/dark.css" media="all"`) {
+		t.Error("dark: dark.css should always apply")
+	}
+	if r := e.post(admin, "/konto/darstellung", url.Values{"theme": {"light"}}); r.StatusCode != http.StatusSeeOther {
+		t.Fatalf("light: %d", r.StatusCode)
+	}
+	if _, body := e.get(admin, "/"); strings.Contains(body, "dark.css") {
+		t.Error("light: dark.css must not be linked")
+	}
+	for _, bad := range []string{"", "Dunkel", "auto "} {
+		if r := e.post(admin, "/konto/darstellung", url.Values{"theme": {bad}}); r.StatusCode != http.StatusUnprocessableEntity {
+			t.Errorf("theme %q: %d", bad, r.StatusCode)
+		}
+	}
+	if a, _ := e.st.Accounts().ByEmail(context.Background(), adminEmail); a.Theme != account.ThemeLight {
+		t.Errorf("stored theme %q", a.Theme)
+	}
+}
+
+func TestDeleteAccount(t *testing.T) {
+	e := newEnv(t)
+	admin := e.loginAdmin()
+	ctx := context.Background()
+	adminAcc, _ := e.st.Accounts().ByEmail(ctx, adminEmail)
+	e.post(admin, "/verwaltung/konten", url.Values{"email": {"typo@example.org"}, "module": {"velo"}})
+	e.post(admin, "/verwaltung/konten", url.Values{"email": {"kim@example.org"}, "module": {"velo"}})
+	typo, _ := e.st.Accounts().ByEmail(ctx, "typo@example.org")
+	kimAcc, _ := e.st.Accounts().ByEmail(ctx, "kim@example.org")
+
+	// Kim logs in and owns a bike: Kim's account cannot be deleted.
+	pw, _ := e.accounts.ResetPassword(ctx, adminAcc, kimAcc.ID)
+	kim := e.client()
+	e.post(kim, "/anmelden", url.Values{"email": {"kim@example.org"}, "password": {pw}})
+	e.post(kim, "/konto/passwort", url.Values{"next": {"ein-langes-passwort"}})
+	if r := e.post(kim, "/velo/velos", url.Values{"name": {"Stadtvelo"}, "color": {"#5c7a3e"}}); r.StatusCode != http.StatusSeeOther {
+		t.Fatalf("bike: %d", r.StatusCode)
+	}
+	if r := e.post(kim, "/verwaltung/konten/"+typo.ID+"/loeschen", url.Values{"confirm": {"1"}}); r.StatusCode != http.StatusForbidden {
+		t.Errorf("non-admin delete: %d", r.StatusCode)
+	}
+	if r, body := e.postBody(admin, "/verwaltung/konten/"+kimAcc.ID+"/loeschen", url.Values{"confirm": {"1"}}); r.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(body, "Sperre es stattdessen") {
+		t.Errorf("account with data: %d", r.StatusCode)
+	}
+	if bikes, _ := e.st.Velo().Bikes(ctx, kimAcc.ID); len(bikes) != 1 {
+		t.Errorf("kim's bike lost: %v", bikes)
+	}
+	if r, _ := e.get(kim, "/konto"); r.StatusCode != http.StatusOK {
+		t.Errorf("kim's session ended by a failed delete: %d", r.StatusCode)
+	}
+
+	// Without confirmation, nothing happens; self-delete is refused.
+	if r := e.post(admin, "/verwaltung/konten/"+typo.ID+"/loeschen", nil); r.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("unconfirmed: %d", r.StatusCode)
+	}
+	if r := e.post(admin, "/verwaltung/konten/"+adminAcc.ID+"/loeschen", url.Values{"confirm": {"1"}}); r.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("self delete: %d", r.StatusCode)
+	}
+	if _, body := e.get(admin, "/verwaltung/konten/"+adminAcc.ID); strings.Contains(body, "/loeschen") {
+		t.Error("own account page offers delete")
+	}
+
+	// The unused invitation goes.
+	if r := e.post(admin, "/verwaltung/konten/"+typo.ID+"/loeschen", url.Values{"confirm": {"1"}}); r.StatusCode != http.StatusSeeOther {
+		t.Fatalf("delete: %d", r.StatusCode)
+	}
+	if _, err := e.st.Accounts().Get(ctx, typo.ID); !errors.Is(err, account.ErrNotFound) {
+		t.Errorf("still there: %v", err)
+	}
+	if r := e.post(admin, "/verwaltung/konten/"+typo.ID+"/loeschen", url.Values{"confirm": {"1"}}); r.StatusCode != http.StatusNotFound {
+		t.Errorf("delete twice: %d", r.StatusCode)
 	}
 }
 

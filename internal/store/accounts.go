@@ -17,16 +17,16 @@ type Accounts struct{ s *Store }
 // Accounts returns the account repository.
 func (s *Store) Accounts() *Accounts { return &Accounts{s} }
 
-const accountCols = `id, email, name, is_admin, status, COALESCE(google_sub, ''), COALESCE(password_hash, ''), password_must_change, created_at, updated_at`
+const accountCols = `id, email, name, is_admin, status, COALESCE(google_sub, ''), COALESCE(password_hash, ''), password_must_change, theme, created_at, updated_at`
 
 func scanAccount(row interface{ Scan(...any) error }) (account.Account, error) {
 	var a account.Account
 	var admin, must int
-	var status, created, updated string
-	if err := row.Scan(&a.ID, &a.Email, &a.Name, &admin, &status, &a.GoogleSub, &a.PasswordHash, &must, &created, &updated); err != nil {
+	var status, theme, created, updated string
+	if err := row.Scan(&a.ID, &a.Email, &a.Name, &admin, &status, &a.GoogleSub, &a.PasswordHash, &must, &theme, &created, &updated); err != nil {
 		return a, err
 	}
-	a.IsAdmin, a.PasswordMustChange, a.Status = admin == 1, must == 1, account.Status(status)
+	a.IsAdmin, a.PasswordMustChange, a.Status, a.Theme = admin == 1, must == 1, account.Status(status), account.Theme(theme)
 	var err error
 	if a.CreatedAt, err = parseTime(created); err != nil {
 		return a, err
@@ -121,19 +121,22 @@ func (r *Accounts) write(ctx context.Context, a account.Account, insert bool) er
 			return fmt.Errorf("%w: %q", account.ErrUnknownMod, m)
 		}
 	}
+	if !slices.Contains(account.Themes, a.Theme) {
+		return fmt.Errorf("%w: %q", account.ErrUnknownTheme, a.Theme)
+	}
 	tx, err := r.s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("store.Accounts begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	args := []any{a.Email, a.Name, b2i(a.IsAdmin), string(a.Status), nullStr(a.GoogleSub), nullStr(a.PasswordHash), b2i(a.PasswordMustChange), fmtTime(a.UpdatedAt)}
+	args := []any{a.Email, a.Name, b2i(a.IsAdmin), string(a.Status), nullStr(a.GoogleSub), nullStr(a.PasswordHash), b2i(a.PasswordMustChange), string(a.Theme), fmtTime(a.UpdatedAt)}
 	if insert {
-		_, err = tx.ExecContext(ctx, `INSERT INTO accounts (email, name, is_admin, status, google_sub, password_hash, password_must_change, updated_at, id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		_, err = tx.ExecContext(ctx, `INSERT INTO accounts (email, name, is_admin, status, google_sub, password_hash, password_must_change, theme, updated_at, id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 			append(args, a.ID, fmtTime(a.CreatedAt))...)
 	} else {
 		var res sql.Result
-		res, err = tx.ExecContext(ctx, `UPDATE accounts SET email=?, name=?, is_admin=?, status=?, google_sub=?, password_hash=?, password_must_change=?, updated_at=? WHERE id=?`,
+		res, err = tx.ExecContext(ctx, `UPDATE accounts SET email=?, name=?, is_admin=?, status=?, google_sub=?, password_hash=?, password_must_change=?, theme=?, updated_at=? WHERE id=?`,
 			append(args, a.ID)...)
 		if err == nil {
 			if n, _ := res.RowsAffected(); n == 0 {
@@ -162,6 +165,15 @@ func (r *Accounts) write(ctx context.Context, a account.Account, insert bool) er
 			return fmt.Errorf("store.Accounts end sessions: %w", err)
 		}
 	}
+	if err := keepAdmin(ctx, tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// keepAdmin fails with ErrLastAdmin when active accounts remain but no
+// active admin.
+func keepAdmin(ctx context.Context, tx *sql.Tx) error {
 	var admins int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM accounts WHERE is_admin = 1 AND status = 'active'`).Scan(&admins); err != nil {
 		return fmt.Errorf("store.Accounts count admins: %w", err)
@@ -172,6 +184,33 @@ func (r *Accounts) write(ctx context.Context, a account.Account, insert bool) er
 	}
 	if total > 0 && admins == 0 {
 		return account.ErrLastAdmin
+	}
+	return nil
+}
+
+// Delete removes an account. Sessions, module grants and page grants go
+// with it (ON DELETE CASCADE). Every other reference to the account (owned
+// rows, pages written, games, expense groups) is a foreign key without
+// cascade, so SQLite refuses the delete: that becomes ErrHasData and the
+// transaction is rolled back. No data is deleted implicitly.
+func (r *Accounts) Delete(ctx context.Context, id string) error {
+	tx, err := r.s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store.Accounts begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, `DELETE FROM accounts WHERE id = ?`, id)
+	if err != nil {
+		if strings.Contains(err.Error(), "FOREIGN KEY constraint failed") {
+			return account.ErrHasData
+		}
+		return fmt.Errorf("store.Accounts delete: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return account.ErrNotFound
+	}
+	if err := keepAdmin(ctx, tx); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
