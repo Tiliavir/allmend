@@ -291,22 +291,34 @@ tfoot th, tfoot td { border-top: 2px solid var(--border); border-bottom: 0; }
 /* ── Schiffe versenken ──────────────────────────────── */
 .game { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); align-items: start; }
 .turn { font-size: 19px; }
-table.sea { border-collapse: separate; border-spacing: 2px; width: max-content; table-layout: fixed; }
+table.sea { --cell: min(30px, calc((100vw - 72px) / 11 - 2px)); border-collapse: separate; border-spacing: 2px; width: max-content; table-layout: fixed; }
+table.sea.big { --cell: min(30px, calc((100vw - 72px) / 13 - 2px)); }
 table.sea thead td { background: none; }
-table.sea th, table.sea td { padding: 0; border: 0; text-align: center; font-size: 12px; color: var(--muted); }
-table.sea td { width: 30px; min-width: 30px; max-width: 30px; height: 30px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); position: relative; }
+table.sea th, table.sea td { padding: 0; border: 0; text-align: center; font-size: 12px; line-height: 1; color: var(--muted); }
+/* Cells stay square: every child is sized from --cell and never taller. */
+table.sea td { width: var(--cell); min-width: var(--cell); max-width: var(--cell); height: var(--cell); max-height: var(--cell); border-radius: 4px; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); position: relative; overflow: hidden; }
 table.sea td.ship { background: color-mix(in srgb, var(--text) 45%, var(--surface)); }
 table.sea td.miss, table.sea td.blocked { background: color-mix(in srgb, var(--accent) 25%, var(--surface)); }
-table.sea td.miss::after, table.sea td.blocked::after { content: ""; position: absolute; inset: 11px; border-radius: 50%; background: var(--muted); }
+table.sea td.miss::after, table.sea td.blocked::after { content: ""; position: absolute; inset: 36%; border-radius: 50%; background: var(--muted); }
 table.sea td.blocked::after { opacity: 0.4; }
 table.sea td.hit { background: #e8590c; }
 table.sea td.sunk { background: #9c1c1c; }
-table.sea td button { width: 100%; height: 100%; min-height: 30px; border: 0; border-radius: 4px; background: transparent; cursor: crosshair; padding: 0; }
+table.sea td.mine::after, table.sea td.boom::after { content: ""; position: absolute; inset: 22%; border-radius: 50%; background: var(--text); box-shadow: 0 0 0 2px color-mix(in srgb, var(--text) 35%, transparent); }
+table.sea td.boom { background: #f59f00; }
+table.sea td button { display: block; width: 100%; height: 100%; border: 0; border-radius: 4px; background: transparent; cursor: crosshair; padding: 0; }
 table.sea td button:hover, table.sea td button:focus-visible { background: color-mix(in srgb, var(--accent) 45%, var(--surface)); }
-table.sea td input[type="checkbox"] { width: 22px; height: 22px; margin: 4px; }
+table.sea td input[type="checkbox"] { display: block; width: calc(var(--cell) - 8px); height: calc(var(--cell) - 8px); margin: 4px; }
+/* Setup: drag ships and mines, tap a ship to turn it. */
+table.sea.setup { user-select: none; -webkit-user-select: none; }
+table.sea.setup.live td.ship, table.sea.setup.live td.mine { cursor: grab; touch-action: none; }
+table.sea.setup td.conflict { background: #e03131; }
+table.sea.setup td.drop { background: color-mix(in srgb, var(--text) 22%, var(--surface)); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--text) 40%, transparent); }
+table.sea.setup td.lifted { opacity: 0.35; }
+table.sea.setup.dragging, table.sea.setup.dragging td { cursor: grabbing; }
+.setup-card .fleet-list { margin: 12px 0; }
+.gunners { margin-bottom: 8px; }
 table.fleet td, table.fleet th { padding: 4px 6px; }
 table.fleet input[type="text"] { width: 72px; text-transform: uppercase; }
-@media (max-width: 420px) { table.sea td { width: 26px; min-width: 26px; max-width: 26px; height: 26px; } }
 
 /* ── Orte ───────────────────────────────────────────── */
 .map { height: 460px; border-radius: 10px; }

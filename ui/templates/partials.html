@@ -15,10 +15,13 @@
 <a href="/velo/velos"{{if eq . "bikes"}} aria-current="page"{{end}}>Velos</a>
 </nav>{{end}}
 {{define "dot"}}<svg class="dot" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="6" fill="{{if .}}{{.}}{{else}}currentColor{{end}}"/></svg>{{end}}
-{{define "sea"}}<table class="sea"><thead><tr><td></td>{{range .Cols}}<th scope="col">{{.}}</th>{{end}}</tr></thead><tbody>
+{{define "sea"}}<table class="sea{{if gt (len .Cols) 10}} big{{end}}"><thead><tr><td></td>{{range .Cols}}<th scope="col">{{.}}</th>{{end}}</tr></thead><tbody>
 {{range .Rows}}<tr><th scope="row">{{.Label}}</th>{{range .Cells}}<td class="{{.Class}}" title="{{.Coord}}: {{.Label}}"></td>{{end}}</tr>
 {{end}}</tbody></table>{{end}}
-{{define "target"}}<table class="sea target"><thead><tr><td></td>{{range .B.Cols}}<th scope="col">{{.}}</th>{{end}}</tr></thead><tbody>
+{{define "setupsea"}}<table class="sea setup{{if gt .N 10}} big{{end}}" data-n="{{.N}}" data-touching="{{if .Touching}}1{{else}}0{{end}}"><thead><tr><td></td>{{range .B.Cols}}<th scope="col">{{.}}</th>{{end}}</tr></thead><tbody>
+{{range .B.Rows}}<tr><th scope="row">{{.Label}}</th>{{range .Cells}}<td class="{{.Class}}" data-x="{{.X}}" data-y="{{.Y}}" title="{{.Coord}}: {{.Label}}"></td>{{end}}</tr>
+{{end}}</tbody></table>{{end}}
+{{define "target"}}<table class="sea target{{if gt (len .B.Cols) 10}} big{{end}}"><thead><tr><td></td>{{range .B.Cols}}<th scope="col">{{.}}</th>{{end}}</tr></thead><tbody>
 {{$salvo := .Salvo}}{{range .B.Rows}}<tr><th scope="row">{{.Label}}</th>{{range .Cells}}<td class="{{.Class}}">{{if .Open}}{{if $salvo}}<input type="checkbox" name="c" value="{{.Coord}}" aria-label="{{.Coord}}">{{else}}<button type="submit" name="c" value="{{.Coord}}" aria-label="Auf {{.Coord}} schießen"></button>{{end}}{{else}}<span class="visually-hidden">{{.Coord}}: {{.Label}}</span>{{end}}</td>{{end}}</tr>
 {{end}}</tbody></table>{{end}}
 {{define "finnav"}}<nav class="subnav" aria-label="Finanzen">
