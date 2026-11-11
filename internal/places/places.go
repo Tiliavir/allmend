@@ -53,7 +53,7 @@ type Repository interface {
 	VisitDays(ctx context.Context, owner string) ([]string, error) // YYYY-MM-DD (UTC), ascending
 	VisitsOn(ctx context.Context, owner string, from, to time.Time) ([]Visit, error)
 	// InsertVisits adds timed visits, skipping ones that exist (same source and time); returns the number added.
-	// A visit without a time is an error (untimed points come only from the legacy import).
+	// A visit without a time is an error (untimed points came only from the almanac import up to 0.3.0).
 	InsertVisits(ctx context.Context, vs []Visit) (int, error)
 }
 

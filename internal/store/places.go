@@ -133,8 +133,8 @@ func (r *Places) VisitDays(ctx context.Context, owner string) ([]string, error) 
 }
 
 // InsertVisits adds timed visits in one transaction, skipping ones that exist
-// (same source and time). Points without a time come only from the legacy
-// import, so a visit without one is an error here.
+// (same source and time). Points without a time came only from the almanac
+// import up to 0.3.0, so a visit without one is an error here.
 func (r *Places) InsertVisits(ctx context.Context, vs []places.Visit) (int, error) {
 	for _, v := range vs {
 		if v.Timestamp.IsZero() {

@@ -112,14 +112,6 @@ func loadConfig() (env.Config, error) {
 	return cfg, os.MkdirAll(cfg.DataDir, 0o750)
 }
 
-func migrationOptions(cfg env.Config, backupDir string) db.Options {
-	return db.Options{
-		BackupDir: backupDir,
-		LegacyDB:  cfg.LegacyDB,
-		Env:       db.MigrationEnv{AdminEmail: cfg.AdminEmail, BaseCurrency: cfg.BaseCurrency},
-	}
-}
-
 func serve() error {
 	cfg, err := loadConfig()
 	if err != nil {
@@ -133,7 +125,7 @@ func serve() error {
 		return err
 	}
 	defer func() { _ = d.Close() }()
-	res, err := db.Migrate(ctx, d, cfg.DBPath(), migrations.All(), migrationOptions(cfg, cfg.BackupDir()))
+	res, err := db.Migrate(ctx, d, migrations.All(), db.Options{BackupDir: cfg.BackupDir()})
 	if err != nil {
 		return err
 	}
@@ -261,15 +253,15 @@ func migrate(dry bool) error {
 		return err
 	}
 	defer func() { _ = d.Close() }()
-	before, err := db.Counts(ctx, d, cfg.LegacyDB)
+	before, err := db.Counts(ctx, d)
 	if err != nil {
 		return err
 	}
-	res, err := db.Migrate(ctx, d, path, migrations.All(), migrationOptions(cfg, backupDir))
+	res, err := db.Migrate(ctx, d, migrations.All(), db.Options{BackupDir: backupDir})
 	if err != nil {
 		return err
 	}
-	after, err := db.Counts(ctx, d, cfg.LegacyDB)
+	after, err := db.Counts(ctx, d)
 	if err != nil {
 		return err
 	}

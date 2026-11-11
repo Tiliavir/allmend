@@ -24,8 +24,6 @@ type Config struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 
-	LegacyDB string // old almanach.db, read-only; default <DataDir>/almanach.db
-
 	BaseCurrency string // ISO 4217, default EUR
 
 	AlphaVantageKey string
@@ -45,9 +43,8 @@ var known = map[string]bool{
 	"ALLMEND_ADDR": true, "ALLMEND_DATA_DIR": true, "ALLMEND_BASE_URL": true,
 	"ALLMEND_ADMIN_EMAIL": true, "ALLMEND_ADMIN_PASSWORD_HASH": true,
 	"ALLMEND_SECURE_COOKIE": true, "ALLMEND_GOOGLE_CLIENT_ID": true,
-	"ALLMEND_GOOGLE_CLIENT_SECRET": true, "ALLMEND_LEGACY_DB": true,
-	"ALLMEND_ALPHAVANTAGE_KEY": true, "ALLMEND_BASE_CURRENCY": true,
-	"ALLMEND_FRANKFURTER_URL": true,
+	"ALLMEND_GOOGLE_CLIENT_SECRET": true, "ALLMEND_ALPHAVANTAGE_KEY": true,
+	"ALLMEND_BASE_CURRENCY": true, "ALLMEND_FRANKFURTER_URL": true,
 }
 
 // Load reads the configuration from environ (os.Environ() format).
@@ -81,7 +78,6 @@ func Load(environ []string) (Config, error) {
 	if len(c.BaseCurrency) != 3 || strings.ToUpper(c.BaseCurrency) != c.BaseCurrency {
 		errs = append(errs, errors.New("ALLMEND_BASE_CURRENCY must be an upper-case ISO 4217 code"))
 	}
-	c.LegacyDB = or(vars["ALLMEND_LEGACY_DB"], filepath.Join(c.DataDir, "almanach.db"))
 
 	if v, ok := vars["ALLMEND_SECURE_COOKIE"]; ok {
 		b, err := strconv.ParseBool(v)

@@ -68,7 +68,7 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = d.Close() })
-	if _, err := db.Migrate(ctx, d, path, migrations.All(), db.Options{BackupDir: dir}); err != nil {
+	if _, err := db.Migrate(ctx, d, migrations.All(), db.Options{BackupDir: dir}); err != nil {
 		t.Fatal(err)
 	}
 	st := store.New(d)

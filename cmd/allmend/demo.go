@@ -36,7 +36,7 @@ func buildDemo(ctx context.Context, out, base string, now time.Time) (int, error
 		return 0, err
 	}
 	defer func() { _ = d.Close() }()
-	if _, err := db.Migrate(ctx, d, path, migrations.All(), db.Options{BackupDir: filepath.Join(tmp, "backup"), Env: db.MigrationEnv{AdminEmail: demo.AdminEmail, BaseCurrency: "EUR"}}); err != nil {
+	if _, err := db.Migrate(ctx, d, migrations.All(), db.Options{BackupDir: filepath.Join(tmp, "backup")}); err != nil {
 		return 0, err
 	}
 	st := store.New(d)

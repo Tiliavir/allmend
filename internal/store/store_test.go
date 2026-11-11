@@ -32,7 +32,7 @@ func open(t *testing.T) (*store.Store, string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = d.Close() })
-	if _, err := db.Migrate(ctx, d, path, migrations.All(), db.Options{BackupDir: filepath.Join(dir, "backup"), Env: db.MigrationEnv{AdminEmail: "admin@example.org"}}); err != nil {
+	if _, err := db.Migrate(ctx, d, migrations.All(), db.Options{BackupDir: filepath.Join(dir, "backup")}); err != nil {
 		t.Fatal(err)
 	}
 	return store.New(d), dir
@@ -41,7 +41,7 @@ func open(t *testing.T) (*store.Store, string) {
 func TestMigrateIdempotentWithBackup(t *testing.T) {
 	s, dir := open(t)
 	ctx := context.Background()
-	res, err := db.Migrate(ctx, s.DB(), filepath.Join(dir, "allmend.db"), migrations.All(), db.Options{BackupDir: filepath.Join(dir, "backup")})
+	res, err := db.Migrate(ctx, s.DB(), migrations.All(), db.Options{BackupDir: filepath.Join(dir, "backup")})
 	if err != nil || len(res.Applied) != 0 {
 		t.Fatalf("second run: %v %v", res, err)
 	}
@@ -61,7 +61,7 @@ func TestMigrateRollsBackOnError(t *testing.T) {
 		{Version: 1, Name: "ok", Up: db.SQL(`CREATE TABLE a (x INTEGER) STRICT`)},
 		{Version: 2, Name: "bad", Up: db.SQL(`CREATE TABLE b (`)},
 	}
-	if _, err := db.Migrate(ctx, d, path, ms, db.Options{BackupDir: dir}); err == nil {
+	if _, err := db.Migrate(ctx, d, ms, db.Options{BackupDir: dir}); err == nil {
 		t.Fatal("want error")
 	}
 	if v, _ := db.CurrentVersion(ctx, d); v != 0 {
@@ -78,37 +78,8 @@ func TestRefusesNewerDatabase(t *testing.T) {
 	s, dir := open(t)
 	ctx := context.Background()
 	_, _ = s.DB().ExecContext(ctx, `INSERT INTO schema_migrations VALUES (999, 'future', '2030-01-01T00:00:00Z')`)
-	if _, err := db.Migrate(ctx, s.DB(), filepath.Join(dir, "allmend.db"), migrations.All(), db.Options{BackupDir: dir}); err == nil {
+	if _, err := db.Migrate(ctx, s.DB(), migrations.All(), db.Options{BackupDir: dir}); err == nil {
 		t.Fatal("older binary must refuse a newer database")
-	}
-}
-
-func TestLegacyAttachedReadOnly(t *testing.T) {
-	dir := t.TempDir()
-	ctx := context.Background()
-	legacyPath := filepath.Join(dir, "almanach.db")
-	l, _ := db.Open(ctx, legacyPath)
-	_, _ = l.ExecContext(ctx, `CREATE TABLE tours (id TEXT, data TEXT)`)
-	_ = l.Close()
-	before, _ := os.ReadFile(legacyPath)
-
-	path := filepath.Join(dir, "allmend.db")
-	d, _ := db.Open(ctx, path)
-	defer func() { _ = d.Close() }()
-	var sawLegacy bool
-	ms := []db.Migration{{Version: 1, Name: "probe", Up: func(ctx context.Context, tx db.Tx, env db.MigrationEnv) error {
-		sawLegacy = env.LegacyAttached
-		if _, err := tx.ExecContext(ctx, `INSERT INTO legacy.tours VALUES ('x', '{}')`); err == nil {
-			return errors.New("legacy database is writable")
-		}
-		return nil
-	}}}
-	if _, err := db.Migrate(ctx, d, path, ms, db.Options{BackupDir: dir, LegacyDB: legacyPath}); err != nil {
-		t.Fatal(err)
-	}
-	after, _ := os.ReadFile(legacyPath)
-	if !sawLegacy || string(before) != string(after) {
-		t.Fatal("legacy not attached or modified")
 	}
 }
 
@@ -258,9 +229,9 @@ func TestPageTreeMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = d.Close() })
-	opt := db.Options{BackupDir: filepath.Join(dir, "backup"), Env: db.MigrationEnv{AdminEmail: "admin@example.org"}}
+	opt := db.Options{BackupDir: filepath.Join(dir, "backup")}
 	all := migrations.All()
-	if _, err := db.Migrate(ctx, d, path, all[:8], opt); err != nil {
+	if _, err := db.Migrate(ctx, d, all[:8], opt); err != nil {
 		t.Fatal(err)
 	}
 	now := "2026-01-01T00:00:00Z"
@@ -272,7 +243,7 @@ func TestPageTreeMigration(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := db.Migrate(ctx, d, path, all, opt); err != nil {
+	if _, err := db.Migrate(ctx, d, all, opt); err != nil {
 		t.Fatal(err)
 	}
 	rows, err := d.QueryContext(ctx, `SELECT title, position, parent_id FROM pages ORDER BY position`)
@@ -406,48 +377,6 @@ func TestPageTree(t *testing.T) {
 	}
 }
 
-func TestCommuteLegacyImport(t *testing.T) {
-	dir := t.TempDir()
-	ctx := context.Background()
-	legacyPath := filepath.Join(dir, "almanach.db")
-	l, _ := db.Open(ctx, legacyPath)
-	_, err := l.ExecContext(ctx, `CREATE TABLE commute_years (id TEXT PRIMARY KEY, data TEXT NOT NULL, schema_version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-INSERT INTO commute_years VALUES ('old-1', '{"id":"old-1","year":2025,"car_dist_km":0,"bike_dist_km":20,"workdays":[20,19,21,0,0,0,0,0,0,0,0,0],"car_train":[13,10,0,0,0,0,0,0,0,0,0,0],"ho":[7,9,21,0,0,0,0,0,0,0,0,0]}', 1, '2025-02-01T10:00:00Z', '2025-03-01T10:00:00Z'),
-	('old-2', '{"id":"old-2","year":2024,"pendler_low_cents":31,"pendler_high_cents":0,"pendler_threshold_km":15}', 1, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z');`)
-	_ = l.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(dir, "allmend.db")
-	d, _ := db.Open(ctx, path)
-	defer func() { _ = d.Close() }()
-	if _, err := db.Migrate(ctx, d, path, migrations.All(), db.Options{BackupDir: dir, LegacyDB: legacyPath, Env: db.MigrationEnv{AdminEmail: "admin@example.org"}}); err != nil {
-		t.Fatal(err)
-	}
-	s := store.New(d)
-	admin, err := s.Accounts().ByEmail(ctx, "admin@example.org")
-	if err != nil || !admin.IsAdmin {
-		t.Fatalf("admin created by import: %+v %v", admin, err)
-	}
-	y, err := s.Commute().Get(ctx, admin.ID, 2025)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if y.CarDistKm != 7.6 || y.TrainDistKm != 15 || y.BikeDistKm != 20 || y.RateLowCents != nil || y.ThresholdKm != nil {
-		t.Errorf("defaults: %+v", y)
-	}
-	if y.Months[0].CarTrain != 13 || y.Months[2].HomeOffice != 21 || y.Months[11].Workdays != 0 {
-		t.Errorf("months: %+v", y.Months)
-	}
-	if v := commute.Compute(y); v.Derived[0].PendlerCents != 13*(20*30+2*38) {
-		t.Errorf("pendler 2025: %d", v.Derived[0].PendlerCents)
-	}
-	y24, _ := s.Commute().Get(ctx, admin.ID, 2024)
-	if y24.RateLowCents == nil || *y24.RateLowCents != 31 || *y24.RateHighCents != 0 || *y24.ThresholdKm != 15 {
-		t.Errorf("2024 overrides: %+v", y24)
-	}
-}
-
 func TestCommuteConflict(t *testing.T) {
 	s, _ := open(t)
 	ctx := context.Background()
@@ -475,144 +404,26 @@ func TestCommuteConflict(t *testing.T) {
 	}
 }
 
-func legacyDB(t *testing.T, dir, stmts string) string {
-	t.Helper()
-	ctx := context.Background()
-	p := filepath.Join(dir, "almanach.db")
-	l, err := db.Open(ctx, p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = l.Close() }()
-	for _, tbl := range []string{"bikes", "tours", "repairs", "bike_year_comments", "bike_challenges"} {
-		if _, err := l.ExecContext(ctx, `CREATE TABLE `+tbl+` (id TEXT PRIMARY KEY, data TEXT NOT NULL, schema_version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := l.ExecContext(ctx, stmts); err != nil {
-		t.Fatal(err)
-	}
-	return p
-}
-
 const ts0 = `'2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'`
 
-func TestVeloLegacyImport(t *testing.T) {
-	dir := t.TempDir()
+// TestPlaces reads places, lists and visits, including points of old KMZ
+// lines without a time that databases imported before 0.4.0 may hold.
+func TestPlaces(t *testing.T) {
 	ctx := context.Background()
-	legacy := legacyDB(t, dir, `
-INSERT INTO bikes VALUES ('b1', '{"id":"b1","name":"Gravel","brand":"Feldweg","acquisition_date":"2023-04-01","purchase_price_minor":250000,"purchase_price_currency":"EUR","color":"#5C7A3E"}', 1, `+ts0+`);
-INSERT INTO tours VALUES ('t1', '{"id":"t1","bike_id":"b1","date":"2024-05-03","distance_km":42.5,"elevation_m":610,"title":"Blauen"}', 1, `+ts0+`),
-	('t2', '{"id":"t2","date":"2024-05-04","distance_km":10}', 1, `+ts0+`);
-INSERT INTO repairs VALUES ('r1', '{"id":"r1","bike_id":"b1","date":"2024-06-01","cost_minor":4590,"cost_currency":"EUR","title":"Kette","odometer_km":3100.5}', 1, `+ts0+`);
-INSERT INTO bike_year_comments VALUES ('c1', '{"id":"c1","year":"2024","comment":"**Gutes** Jahr"}', 1, `+ts0+`);
-INSERT INTO bike_challenges VALUES ('g1', '{"id":"g1","year":"2024","month":"05","target_km":300}', 1, `+ts0+`),
-	('g2', '{"id":"g2","year":"2024","month":"06","target_km":0}', 1, `+ts0+`);`)
-	path := filepath.Join(dir, "allmend.db")
-	d, _ := db.Open(ctx, path)
-	defer func() { _ = d.Close() }()
-	if _, err := db.Migrate(ctx, d, path, migrations.All(), db.Options{BackupDir: dir, LegacyDB: legacy, Env: db.MigrationEnv{AdminEmail: "admin@example.org", BaseCurrency: "EUR"}}); err != nil {
-		t.Fatal(err)
-	}
-	s := store.New(d)
-	admin, _ := s.Accounts().ByEmail(ctx, "admin@example.org")
-	r := s.Velo()
-	b, err := r.Bike(ctx, admin.ID, "b1")
-	if err != nil || b.PurchaseCents != 250000 || b.Color != "#5c7a3e" || b.Acquired != "2023-04-01" {
-		t.Fatalf("bike: %+v %v", b, err)
-	}
-	ts, _ := r.Tours(ctx, admin.ID)
-	if len(ts) != 2 || ts[1].ElevationM != 610 || ts[1].BikeID != "b1" || ts[0].BikeID != "" {
-		t.Fatalf("tours: %+v", ts)
-	}
-	reps, _ := r.Repairs(ctx, admin.ID, "b1")
-	if len(reps) != 1 || reps[0].CostCents != 4590 || *reps[0].OdometerKm != 3100.5 {
-		t.Fatalf("repairs: %+v", reps)
-	}
-	if c, _ := r.Comment(ctx, admin.ID, 2024); c != "**Gutes** Jahr" {
-		t.Errorf("comment %q", c)
-	}
-	if g, _ := r.Goal(ctx, admin.ID, 2024, 5); g != 300 {
-		t.Errorf("goal %v", g)
-	}
-	// Another owner sees nothing.
-	if other, _ := r.Tours(ctx, "someone-else"); len(other) != 0 {
-		t.Error("tours leak across owners")
-	}
-}
-
-func TestVeloLegacyBadDateStops(t *testing.T) {
-	dir := t.TempDir()
-	ctx := context.Background()
-	legacy := legacyDB(t, dir, `INSERT INTO tours VALUES ('t1', '{"id":"t1","date":"2024-13-03","distance_km":4}', 1, `+ts0+`);`)
-	path := filepath.Join(dir, "allmend.db")
-	d, _ := db.Open(ctx, path)
-	defer func() { _ = d.Close() }()
-	_, err := db.Migrate(ctx, d, path, migrations.All(), db.Options{BackupDir: dir, LegacyDB: legacy, Env: db.MigrationEnv{AdminEmail: "admin@example.org"}})
-	if err == nil || !strings.Contains(err.Error(), "t1=2024-13-03") {
-		t.Fatalf("want date error, got %v", err)
-	}
-	if v, _ := db.CurrentVersion(ctx, d); v != 0 {
-		t.Fatalf("partial migration: version %d", v)
-	}
-}
-
-func TestVeloLegacyRejectsUnexpected(t *testing.T) {
-	cases := map[string]string{
-		"orphan tour":   `INSERT INTO tours VALUES ('t9', '{"id":"t9","bike_id":"gone","date":"2024-05-04","distance_km":10}', 1, ` + ts0 + `);`,
-		"chf bike":      `INSERT INTO bikes VALUES ('b9', '{"id":"b9","name":"X","purchase_price_minor":100,"purchase_price_currency":"CHF"}', 1, ` + ts0 + `);`,
-		"text distance": `INSERT INTO tours VALUES ('t9', '{"id":"t9","date":"2024-05-04","distance_km":"10"}', 1, ` + ts0 + `);`,
-		"no distance":   `INSERT INTO tours VALUES ('t9', '{"id":"t9","date":"2024-05-04"}', 1, ` + ts0 + `);`,
-		"orphan repair": `INSERT INTO repairs VALUES ('r9', '{"id":"r9","bike_id":"gone","date":"2024-05-04","cost_minor":1,"title":"x"}', 1, ` + ts0 + `);`,
-		"float cost":    `INSERT INTO bikes VALUES ('b1', '{"id":"b1","name":"X"}', 1, ` + ts0 + `); INSERT INTO repairs VALUES ('r9', '{"id":"r9","bike_id":"b1","date":"2024-05-04","cost_minor":1.5,"title":"x"}', 1, ` + ts0 + `);`,
-		"month 13 goal": `INSERT INTO bike_challenges VALUES ('g9', '{"id":"g9","year":"2024","month":"13","target_km":100}', 1, ` + ts0 + `);`,
-		"nameless bike": `INSERT INTO bikes VALUES ('b9', '{"id":"b9","name":" "}', 1, ` + ts0 + `);`,
-	}
-	for name, stmt := range cases {
-		t.Run(name, func(t *testing.T) {
-			dir := t.TempDir()
-			ctx := context.Background()
-			legacy := legacyDB(t, dir, stmt)
-			path := filepath.Join(dir, "allmend.db")
-			d, _ := db.Open(ctx, path)
-			defer func() { _ = d.Close() }()
-			_, err := db.Migrate(ctx, d, path, migrations.All(), db.Options{BackupDir: dir, LegacyDB: legacy, Env: db.MigrationEnv{AdminEmail: "admin@example.org", BaseCurrency: "EUR"}})
-			if err == nil || !strings.Contains(err.Error(), "9") {
-				t.Fatalf("want rejection naming the row, got %v", err)
-			}
-			if v, _ := db.CurrentVersion(ctx, d); v != 0 {
-				t.Fatalf("partial migration: version %d", v)
-			}
-		})
-	}
-}
-
-func TestPlacesLegacyImport(t *testing.T) {
-	dir := t.TempDir()
-	ctx := context.Background()
-	p := filepath.Join(dir, "almanach.db")
-	l, _ := db.Open(ctx, p)
-	for _, tbl := range []string{"places", "place_lists", "place_list_places", "place_visits"} {
-		_, _ = l.ExecContext(ctx, `CREATE TABLE `+tbl+` (id TEXT PRIMARY KEY, data TEXT NOT NULL, schema_version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`)
-	}
-	_, err := l.ExecContext(ctx, `
-INSERT INTO places VALUES ('p1', '{"name":"Basel","latitude":47.5596,"longitude":7.5886}', 1, `+ts0+`);
-INSERT INTO place_lists VALUES ('l1', '{"name":"Rhein","date_from":"2024-05-01","date_to":"","source_file":"trip.json"}', 1, `+ts0+`);
-INSERT INTO place_list_places VALUES ('j1', '{"place_list_id":"l1","place_id":"p1"}', 1, `+ts0+`);
-INSERT INTO place_visits VALUES ('v1', '{"latitude":47.5,"longitude":7.6,"timestamp":"2024-05-03T10:00:00Z","source_file":"trip.json"}', 1, `+ts0+`);
-INSERT INTO place_visits VALUES ('v2', '{"latitude":46.2,"longitude":7.8,"timestamp":"line:00000001","source_file":"weg.kmz"}', 1, `+ts0+`);
-INSERT INTO place_visits VALUES ('v3', '{"latitude":46.1,"longitude":7.8,"timestamp":"line:00000000","source_file":"weg.kmz"}', 1, `+ts0+`);`)
-	_ = l.Close()
+	s, _ := open(t)
+	d := s.DB()
+	_, err := d.ExecContext(ctx, `
+INSERT INTO accounts (id, email, is_admin, status, created_at, updated_at) VALUES ('admin', 'admin@example.org', 1, 'active', `+ts0+`);
+INSERT INTO places (id, owner_id, name, latitude, longitude, created_at, updated_at) VALUES ('p1', 'admin', 'Basel', 47.5596, 7.5886, `+ts0+`);
+INSERT INTO place_lists (id, owner_id, name, date_from, source_file, created_at, updated_at) VALUES ('l1', 'admin', 'Rhein', '2024-05-01', 'trip.json', `+ts0+`);
+INSERT INTO place_list_places (list_id, place_id) VALUES ('l1', 'p1');
+INSERT INTO place_visits (id, owner_id, latitude, longitude, at, seq, source_file) VALUES
+	('v1', 'admin', 47.5, 7.6, '2024-05-03T10:00:00.000Z', NULL, 'trip.json'),
+	('v2', 'admin', 46.2, 7.8, NULL, 1, 'weg.kmz'),
+	('v3', 'admin', 46.1, 7.8, NULL, 0, 'weg.kmz');`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(dir, "allmend.db")
-	d, _ := db.Open(ctx, path)
-	defer func() { _ = d.Close() }()
-	if _, err := db.Migrate(ctx, d, path, migrations.All(), db.Options{BackupDir: dir, LegacyDB: p, Env: db.MigrationEnv{AdminEmail: "admin@example.org"}}); err != nil {
-		t.Fatal(err)
-	}
-	s := store.New(d)
 	admin, _ := s.Accounts().ByEmail(ctx, "admin@example.org")
 	list, ps, err := s.Places().List(ctx, admin.ID, "l1")
 	if err != nil || len(ps) != 1 || ps[0].Name != "Basel" || list.SourceFile != "trip.json" {
@@ -643,52 +454,8 @@ INSERT INTO place_visits VALUES ('v3', '{"latitude":46.1,"longitude":7.8,"timest
 		{ID: "x", OwnerID: admin.ID, Latitude: 47.5, Longitude: 7.6, Timestamp: vs[0].Timestamp.Add(2 * time.Hour), SourceFile: "trip.json"}}); err == nil {
 		t.Error("duplicate id accepted")
 	}
-	// A point without a time only comes from the legacy import.
+	// New points always have a time.
 	if _, err := s.Places().InsertVisits(ctx, []places.Visit{{ID: "y", OwnerID: admin.ID, Latitude: 47.5, Longitude: 7.6, SourceFile: "weg.kmz"}}); err == nil {
 		t.Error("untimed visit accepted")
-	}
-}
-
-func TestPlacesLegacyRejectsUnexpected(t *testing.T) {
-	cases := map[string]string{
-		"short line": `{"latitude":46.2,"longitude":7.8,"timestamp":"line:12","source_file":"weg.kmz"}`,
-		"text time":  `{"latitude":46.2,"longitude":7.8,"timestamp":"gestern","source_file":"weg.kmz"}`,
-		"no time":    `{"latitude":46.2,"longitude":7.8,"source_file":"weg.kmz"}`,
-		"dup line":   `{"latitude":46.2,"longitude":7.8,"timestamp":"line:00000000","source_file":"a.kmz"}`,
-	}
-	for name, data := range cases {
-		t.Run(name, func(t *testing.T) {
-			dir := t.TempDir()
-			ctx := context.Background()
-			p := filepath.Join(dir, "almanach.db")
-			l, _ := db.Open(ctx, p)
-			_, _ = l.ExecContext(ctx, `CREATE TABLE place_visits (id TEXT PRIMARY KEY, data TEXT NOT NULL, schema_version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`)
-			stmt := `INSERT INTO place_visits VALUES ('v9', ?, 1, ` + ts0 + `)`
-			if name == "dup line" {
-				stmt += `, ('v8', ?, 1, ` + ts0 + `)`
-			}
-			args := []any{data}
-			if name == "dup line" {
-				args = append(args, data)
-			}
-			_, err := l.ExecContext(ctx, stmt, args...)
-			_ = l.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
-			path := filepath.Join(dir, "allmend.db")
-			d, _ := db.Open(ctx, path)
-			defer func() { _ = d.Close() }()
-			_, err = db.Migrate(ctx, d, path, migrations.All(), db.Options{BackupDir: dir, LegacyDB: p, Env: db.MigrationEnv{AdminEmail: "admin@example.org"}})
-			if err == nil {
-				t.Fatal("want rejection")
-			}
-			if name != "dup line" && !strings.Contains(err.Error(), "v9") {
-				t.Fatalf("want rejection naming the row, got %v", err)
-			}
-			if v, _ := db.CurrentVersion(ctx, d); v != 0 {
-				t.Fatalf("partial migration: version %d", v)
-			}
-		})
 	}
 }

@@ -5,63 +5,36 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 )
 
-// Counts returns row counts of every table in the main database and, if
-// legacyPath exists, of the legacy database (keys prefixed "legacy.").
-func Counts(ctx context.Context, d *sql.DB, legacyPath string) (map[string]int, error) {
-	out := map[string]int{}
-	if err := countSchema(ctx, d, "main", out); err != nil {
-		return nil, err
-	}
-	if legacyPath == "" {
-		return out, nil
-	}
-	if _, err := os.Stat(legacyPath); errors.Is(err, os.ErrNotExist) {
-		return out, nil
-	}
-	if _, err := d.ExecContext(ctx, `ATTACH DATABASE ? AS legacy_count`, "file:"+legacyPath+"?mode=ro"); err != nil {
-		return nil, fmt.Errorf("db.Counts attach: %w", err)
-	}
-	defer func() { _, _ = d.ExecContext(context.WithoutCancel(ctx), `DETACH DATABASE legacy_count`) }()
-	tmp := map[string]int{}
-	if err := countSchema(ctx, d, "legacy_count", tmp); err != nil {
-		return nil, err
-	}
-	for k, v := range tmp {
-		out["legacy."+k] = v
-	}
-	return out, nil
-}
-
-func countSchema(ctx context.Context, d *sql.DB, schema string, out map[string]int) error {
-	//nolint:gosec // schema is "main" or our own attach alias, never input
-	rows, err := d.QueryContext(ctx, `SELECT name FROM `+schema+`.sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+// Counts returns the row count of every table in the database.
+func Counts(ctx context.Context, d *sql.DB) (map[string]int, error) {
+	rows, err := d.QueryContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
 	if err != nil {
-		return fmt.Errorf("db.Counts %s: %w", schema, err)
+		return nil, fmt.Errorf("db.Counts: %w", err)
 	}
 	var names []string
 	for rows.Next() {
 		var n string
 		if err := rows.Scan(&n); err != nil {
 			_ = rows.Close()
-			return err
+			return nil, err
 		}
 		names = append(names, n)
 	}
 	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
-		return err
+		return nil, err
 	}
+	out := map[string]int{}
 	for _, n := range names {
 		var c int
-		if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+schema+`."`+n+`"`).Scan(&c); err != nil {
-			return fmt.Errorf("db.Counts %s.%s: %w", schema, n, err)
+		if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM "`+n+`"`).Scan(&c); err != nil {
+			return nil, fmt.Errorf("db.Counts %s: %w", n, err)
 		}
 		out[n] = c
 	}
-	return nil
+	return out, nil
 }
 
 // SortedKeys returns the union of keys, sorted.
