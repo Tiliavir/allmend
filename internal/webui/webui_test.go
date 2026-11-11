@@ -383,6 +383,10 @@ func TestPagesRender(t *testing.T) {
 	r := e.post(admin, "/schiffe", url.Values{"gegner": {kimAcc.ID}, "variante": {"salve"}, "wasser": {"1"}})
 	game := strings.SplitN(r.Header.Get("Location"), "?", 2)[0]
 	pages["schiffe-aufstellung"] = pageCase{admin, game, 200}
+	r = e.post(admin, "/schiffe", url.Values{"gegner": {kimAcc.ID}, "variante": {"seeminen"}})
+	pages["schiffe-aufstellung-minen"] = pageCase{admin, strings.SplitN(r.Header.Get("Location"), "?", 2)[0], 200}
+	r = e.post(admin, "/schiffe", url.Values{"gegner": {kimAcc.ID}, "variante": {"grosses-meer"}})
+	pages["schiffe-aufstellung-gross"] = pageCase{admin, strings.SplitN(r.Header.Get("Location"), "?", 2)[0], 200}
 	aid := adminID(e)
 	if _, err := e.st.DB().ExecContext(context.Background(), `INSERT INTO places VALUES ('p1', ?, 'Basel', 'Rheinknie', 47.5596, 7.5886, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z');
 INSERT INTO place_lists VALUES ('l1', ?, 'Rhein', '', '2024-05-01', '2024-05-04', 'trip.json', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z');
@@ -414,8 +418,8 @@ INSERT INTO place_visits VALUES ('v2', ?, NULL, 46.1, 7.8, NULL, 0, 'weg.kmz'), 
 			// Also dump the running game: both fleets placed, a salvo fired.
 			gid := strings.TrimPrefix(game, "/schiffe/")
 			g, _ := e.st.Schiffe().Get(context.Background(), gid)
-			_ = g.Place(g.PlayerA, schiffe.RandomFleet(mrand.New(mrand.NewPCG(1, 1)), 10, false))
-			_ = g.Place(g.PlayerB, schiffe.RandomFleet(mrand.New(mrand.NewPCG(2, 2)), 10, false))
+			_ = g.Place(g.PlayerA, schiffe.RandomFleet(mrand.New(mrand.NewPCG(1, 1)), 10, false), nil)
+			_ = g.Place(g.PlayerB, schiffe.RandomFleet(mrand.New(mrand.NewPCG(2, 2)), 10, false), nil)
 			g.Version++
 			_ = e.st.Schiffe().Save(context.Background(), g, g.Version-1)
 			_, running := e.get(p.c, game)
@@ -773,6 +777,96 @@ func TestSchiffe(t *testing.T) {
 	if resp.Header.Get("Content-Type") != "text/event-stream" || !strings.Contains(string(buf[:n]), "event: update") {
 		t.Errorf("sse: %q %v", buf[:n], resp.Header)
 	}
+}
+
+func TestSchiffeMines(t *testing.T) {
+	e := newEnv(t)
+	admin := e.loginAdmin()
+	ctx := context.Background()
+	adminAcc, _ := e.st.Accounts().ByEmail(ctx, adminEmail)
+	login := func(email string) (*http.Client, string) {
+		e.post(admin, "/verwaltung/konten", url.Values{"email": {email}, "module": {"schiffe"}})
+		acc, _ := e.st.Accounts().ByEmail(ctx, email)
+		pw, _ := e.accounts.ResetPassword(ctx, adminAcc, acc.ID)
+		c := e.client()
+		e.post(c, "/anmelden", url.Values{"email": {email}, "password": {pw}})
+		e.post(c, "/konto/passwort", url.Values{"next": {"ein-langes-passwort"}})
+		return c, acc.ID
+	}
+	kim, kimID := login("kim@example.org")
+	lou, _ := login("lou@example.org")
+	r := e.post(lou, "/schiffe", url.Values{"gegner": {kimID}, "variante": {"seeminen"}, "wasser": {"1"}})
+	gamePath := strings.SplitN(r.Header.Get("Location"), "?", 2)[0]
+	if _, body := e.get(lou, gamePath); strings.Count(body, `name="mine"`) != 3 || !strings.Contains(body, `class="sea setup"`) {
+		t.Fatal("setup form without three mines or setup board")
+	}
+	fleet := []schiffe.Ship{{Size: 5, X: 0, Y: 0, Horizontal: true}, {Size: 4, X: 0, Y: 2, Horizontal: true}, {Size: 4, X: 6, Y: 2, Horizontal: true},
+		{Size: 3, X: 0, Y: 4, Horizontal: true}, {Size: 3, X: 4, Y: 4, Horizontal: true}, {Size: 3, X: 8, Y: 4},
+		{Size: 2, X: 0, Y: 6, Horizontal: true}, {Size: 2, X: 3, Y: 6, Horizontal: true}, {Size: 2, X: 0, Y: 8, Horizontal: true}, {Size: 2, X: 3, Y: 8, Horizontal: true}}
+	form := fleetForm(fleet)
+	if r := e.post(lou, gamePath+"/aufstellung", form); r.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("fleet without mines: %d", r.StatusCode)
+	}
+	form["mine"] = []string{"H10", "J10", "A1"}
+	r, body := e.postBody(lou, gamePath+"/aufstellung", form)
+	if r.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(body, "überlappen bei A1") || !strings.Contains(body, `name="mine" value="A1"`) {
+		t.Errorf("mine on a ship: %d, entered setup kept: %v", r.StatusCode, strings.Contains(body, `name="mine" value="A1"`))
+	}
+	form["mine"] = []string{"H10", "J10", "J1"}
+	for _, c := range []*http.Client{lou, kim} {
+		if r := e.post(c, gamePath+"/aufstellung", form); r.StatusCode != http.StatusSeeOther {
+			t.Fatalf("place: %d", r.StatusCode)
+		}
+	}
+	_, body = e.get(lou, gamePath)
+	if !strings.Contains(body, `name="schiff"`) || !strings.Contains(body, `value="9" checked`) {
+		t.Error("no gunner choice, or not the smallest ship preselected")
+	}
+	target := body[strings.Index(body, `class="sea target"`):strings.Index(body, "Dein Meer")]
+	if strings.Contains(target, `class="mine"`) || strings.Contains(target, `class="ship"`) {
+		t.Error("opponent's mines or ships leak into the target sea")
+	}
+	if r := e.post(lou, gamePath+"/schuss", url.Values{"c": {"J10"}}); r.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("shot without ship: %d", r.StatusCode)
+	}
+	if r := e.post(lou, gamePath+"/schuss", url.Values{"c": {"J10"}, "schiff": {"x"}}); r.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("shot with bad ship: %d", r.StatusCode)
+	}
+	if r := e.post(lou, gamePath+"/schuss", url.Values{"c": {"J10"}, "schiff": {"0"}}); r.StatusCode != http.StatusSeeOther {
+		t.Fatalf("mine shot: %d", r.StatusCode)
+	}
+	if _, body := e.get(lou, gamePath); !strings.Contains(body, "J10: Seemine! Schlachtschiff gesunken") {
+		t.Error("no message about the mine")
+	}
+	_, body = e.get(kim, gamePath)
+	if !strings.Contains(body, `class="boom"`) || !strings.Contains(body, "Seemine! Schlachtschiff gesunken") {
+		t.Error("Kim does not see the exploded mine and the lost battleship")
+	}
+	// The mine is gone for Lou's battleship: Kim's view of Lou's sea shows it sunk.
+	target = body[strings.Index(body, `class="sea target"`):strings.Index(body, "Dein Meer")]
+	if strings.Count(target, `class="sunk"`) != 5 {
+		t.Errorf("lost battleship not shown sunk: %d", strings.Count(target, `class="sunk"`))
+	}
+	if r := e.post(kim, gamePath+"/schuss", url.Values{"c": {"E10"}, "schiff": {"0"}}); r.StatusCode != http.StatusSeeOther {
+		t.Fatalf("kim: %d", r.StatusCode)
+	}
+	if _, body := e.get(lou, gamePath); strings.Contains(body, `name="schiff" value="0"`) || !strings.Contains(body, `name="schiff" value="1"`) {
+		t.Error("lost ship offered, or ships afloat missing")
+	}
+}
+
+func (e *env) postBody(c *http.Client, path string, form url.Values) (*http.Response, string) {
+	e.t.Helper()
+	req, _ := http.NewRequest(http.MethodPost, e.srv.URL+path, strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	resp, err := c.Do(req)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp, string(b)
 }
 
 func TestOrte(t *testing.T) {

@@ -6,6 +6,19 @@ versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 
 ## [Unreleased]
 
+### Added
+
+- Schiffe versenken: new variant "Seeminen". Each side also hides three sea
+  mines; you choose the ship you fire with, and a shot on a mine sinks that
+  ship (#5).
+
+### Changed
+
+- Schiffe versenken: placing the fleet works on the board. Tap a ship to
+  turn it around its middle, drag ships (and mines) to move them; the
+  landing cells turn grey, overlapping or touching cells red. The list form
+  stays available under "Als Liste bearbeiten".
+
 ### Removed
 
 - The one-time import of an almanac database (`almanach.db`) and the
@@ -13,6 +26,12 @@ versions: [Semantic Versioning](https://semver.org/). Releasing is described in
   keep their data and need nothing. Remove `ALLMEND_LEGACY_DB` from the
   container configuration if it is set: unknown variables stop the start.
   To switch from almanac, start 0.3.0 first.
+
+### Fixed
+
+- Schiffe versenken: board cells stay square on phones when it is your turn
+  (the shot buttons and salvo checkboxes made the rows taller), and the
+  12 × 12 board fits narrow screens.
 
 ## [0.3.0] - 2026-11-09
 

@@ -19,3 +19,4 @@
 | [Configuration via environment, dependency set](adr/ADR-20261109-config-and-dependencies.md) | Accepted |
 | [Public demo as a static export on GitHub Pages](adr/ADR-20261109-demo-pages.md) | Proposed |
 | [Ausgaben (shared expenses, Splitwise replacement)](adr/ADR-20261109-ausgaben.md) | Proposed |
+| [Schiffe versenken: Seeminen and drag-and-drop setup](adr/ADR-20261111-sea-mines.md) | Proposed |

@@ -4,31 +4,33 @@
 <p class="muted" id="schiffe" data-events="/schiffe/{{$d.Game.ID}}/ereignisse" data-version="{{$d.Game.Version}}">{{$d.Variant.Name}} – {{$d.Variant.Rules}}{{if $d.Game.Touching}} Schiffe dürfen sich berühren.{{end}}{{if $d.Game.AutoWater}} Felder um versenkte Schiffe sind Wasser.{{end}}</p>
 {{if eq $d.Game.Status "aufstellung"}}
 {{if $d.Placed}}<p class="flash" role="status">Deine Flotte steht. Warte, bis {{$d.Opponent}} aufgestellt hat – die Seite aktualisiert sich von selbst.</p>
-{{else}}<div class="game">
-<section class="card" aria-labelledby="flotte">
+{{else}}<section class="card setup-card" aria-labelledby="flotte">
 <h2 id="flotte">Deine Flotte</h2>
-{{template "sea" $d.Own}}
-<a class="button secondary" href="/schiffe/{{$d.Game.ID}}">Neu würfeln</a>
-</section>
-<section class="card" aria-labelledby="aufstellen">
-<h2 id="aufstellen">Aufstellen</h2>
-<p class="muted small">Startfeld ist das obere bzw. linke Ende. Ändere Felder nach Belieben oder würfle neu.</p>
+<p class="muted small" id="setup-hint" hidden>Tippe ein Schiff an, um es zu drehen. Zieh {{if $d.Mines}}Schiffe und Minen{{else}}ein Schiff{{end}}, um {{if $d.Mines}}sie{{else}}es{{end}} zu verschieben. Rote Felder überlappen{{if not $d.Game.Touching}} oder berühren sich{{end}}.</p>
 <form method="post" action="/schiffe/{{$d.Game.ID}}/aufstellung">
-<table class="fleet"><thead><tr><th scope="col">Schiff</th><th scope="col">Start</th><th scope="col">Richtung</th></tr></thead><tbody>
+{{template "setupsea" dict "B" $d.Own "N" $d.Size "Touching" $d.Game.Touching}}
+<details class="fleet-list" open><summary>Als Liste bearbeiten</summary>
+<p class="muted small">Startfeld ist das obere bzw. linke Ende.</p>
+<table class="fleet"><thead><tr><th scope="col">{{if $d.Mines}}Schiff / Mine{{else}}Schiff{{end}}</th><th scope="col">Start</th><th scope="col">Richtung</th></tr></thead><tbody>
 {{range $i, $s := $d.Proposal}}<tr><th scope="row">{{$s.Name}} ({{$s.Size}})</th>
-<td><input type="text" name="start" value="{{$s.Start}}" required maxlength="3" pattern="[A-La-l][0-9]{1,2}" aria-label="{{$s.Name}} {{$i}} Startfeld"></td>
+<td><input type="text" name="start" data-size="{{$s.Size}}" value="{{$s.Start}}" required maxlength="3" pattern="[A-La-l][0-9]{1,2}" aria-label="{{$s.Name}} {{$i}} Startfeld"></td>
 <td><select name="richtung" aria-label="{{$s.Name}} {{$i}} Richtung"><option value="h"{{if $s.Horizontal}} selected{{end}}>waagerecht</option><option value="v"{{if not $s.Horizontal}} selected{{end}}>senkrecht</option></select></td></tr>
+{{end}}{{range $i, $m := $d.ProposalMines}}<tr><th scope="row">Seemine</th>
+<td><input type="text" name="mine" value="{{$m}}" required maxlength="3" pattern="[A-La-l][0-9]{1,2}" aria-label="Seemine {{$i}} Feld"></td><td></td></tr>
 {{end}}</tbody></table>
-<div class="actions"><button class="button" type="submit">So aufstellen</button></div>
+</details>
+<div class="actions"><button class="button" type="submit">So aufstellen</button><a class="button secondary" href="/schiffe/{{$d.Game.ID}}">Neu würfeln</a></div>
 </form>
-</section>
-</div>{{end}}
+</section>{{end}}
 {{else}}
-<p class="turn" role="status">{{if eq $d.Game.Status "beendet"}}{{if $d.Won}}Gewonnen! 🎉{{else}}{{$d.Opponent}} hat gewonnen.{{end}}{{else if $d.MyTurn}}<b>Du bist am Zug</b>{{if $d.Salvo}} – wähle {{$d.Shots}} Felder.{{else}} – tippe auf ein Feld.{{end}}{{else}}{{$d.Opponent}} ist am Zug.{{end}}</p>
+<p class="turn" role="status">{{if eq $d.Game.Status "beendet"}}{{if $d.Won}}Gewonnen! 🎉{{else}}{{$d.Opponent}} hat gewonnen.{{end}}{{else if $d.MyTurn}}<b>Du bist am Zug</b>{{if $d.Salvo}} – wähle {{$d.Shots}} Felder.{{else if $d.Mines}} – wähle ein Schiff und tippe auf ein Feld.{{else}} – tippe auf ein Feld.{{end}}{{else}}{{$d.Opponent}} ist am Zug.{{end}}</p>
 <div class="game">
 <section class="card" aria-labelledby="ziel">
 <h2 id="ziel">Meer von {{$d.Opponent}}</h2>
 <form method="post" action="/schiffe/{{$d.Game.ID}}/schuss">
+{{if $d.Gunners}}<fieldset class="gunners"><legend>Feuern mit</legend>
+{{range $d.Gunners}}<label class="check"><input type="radio" name="schiff" value="{{.Index}}"{{if .Checked}} checked{{end}} required>{{.Label}}</label>
+{{end}}</fieldset>{{end}}
 {{template "target" dict "B" $d.Target "Salvo" $d.Salvo}}
 {{if and $d.MyTurn $d.Salvo}}<div class="actions" data-shots="{{$d.Shots}}"><button class="button" type="submit">Salve abfeuern</button></div>{{end}}
 </form>
