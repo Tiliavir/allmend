@@ -6,6 +6,14 @@ versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 
 ## [Unreleased]
 
+### Removed
+
+- The one-time import of an almanac database (`almanach.db`) and the
+  variable `ALLMEND_LEGACY_DB`. Databases migrated with 0.3.0 or earlier
+  keep their data and need nothing. Remove `ALLMEND_LEGACY_DB` from the
+  container configuration if it is set: unknown variables stop the start.
+  To switch from almanac, start 0.3.0 first.
+
 ## [0.3.0] - 2026-11-09
 
 ### Added

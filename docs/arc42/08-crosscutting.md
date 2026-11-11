@@ -4,7 +4,7 @@
 
 Never "shit in, shit out": unexpected input is an error, never guessed,
 defaulted or silently dropped. Validation happens at the interface where data
-enters Allmend — HTTP forms, environment, the legacy import, external APIs —
+enters Allmend — HTTP forms, environment, file imports, external APIs —
 and is backed by database constraints (`STRICT` tables, `CHECK`, foreign
 keys). Hence everything stored is valid, and code reading the database does
 not re-check it.

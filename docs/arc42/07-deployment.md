@@ -18,7 +18,6 @@ DSM reverse proxy (HTTPS), LAN only. Data in the volume `/app/data`:
 | `ALLMEND_ALPHAVANTAGE_KEY` | for prices | Alpha Vantage key (free tier: 25 calls a day). Without it only exchange rates are loaded. |
 | `ALLMEND_FRANKFURTER_URL` | no | Exchange rates, default `https://api.frankfurter.dev/v1`; a self-hosted Frankfurter works too. |
 | `ALLMEND_SECURE_COOKIE` | no | `false` only for plain-HTTP development. |
-| `ALLMEND_LEGACY_DB` | no | Old `almanach.db`, read-only; default `<data dir>/almanach.db`. |
 
 Unknown `ALLMEND_*` variables stop the start.
 
@@ -41,6 +40,6 @@ Unknown `ALLMEND_*` variables stop the start.
 
 ## First switch from almanac
 
-Put the old `almanach.db` into the data volume (all old connectors were SQLite).
-Each module's migration step imports its legacy data once, owned by the
-first admin; the old files stay untouched.
+Up to 0.3.0 the migration steps imported an old `almanach.db` from the data
+volume once. 0.4.0 removed that import (#8): switch with 0.3.0 first, then
+upgrade. The old file is no longer read and can be archived.

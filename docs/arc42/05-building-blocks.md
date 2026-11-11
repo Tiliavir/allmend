@@ -15,7 +15,7 @@ flowchart LR
 | --- | --- |
 | `cmd/allmend` | Composition root; subcommands `serve`, `migrate [--dry-run]`, `hashpw`, `health`. |
 | `internal/env` | Configuration from `ALLMEND_*` variables; unknown ones fail. |
-| `internal/db` | Open SQLite, migrate (backup, legacy attach, one transaction), counts. |
+| `internal/db` | Open SQLite, migrate (backup, one transaction), counts. |
 | `internal/migrations` | Ordered schema steps (global version numbers). |
 | `internal/account` | Accounts, module access, admin role, login rules. |
 | `internal/session` | Server-side sessions and pending Google logins. |
