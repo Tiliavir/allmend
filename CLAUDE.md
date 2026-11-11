@@ -7,8 +7,7 @@ decisions: `docs/arc42/09-architecture-decisions.md`. Open points: `OPEN.md`.
 
 - **No data loss.** Schema changes only as a new step in
   `internal/migrations` (never edit a released step). Every step runs in the
-  one migration transaction after the automatic backup. Legacy data is read
-  from the attached `legacy` schema, never written. Test the step with
+  one migration transaction after the automatic backup. Test the step with
   `allmend migrate --dry-run` against a copy of real data before release.
 - **No data leak.** Owned rows carry `owner_id`; repositories filter by the
   acting account in SQL. Access per module is checked by `Server.Module`.
@@ -18,7 +17,7 @@ decisions: `docs/arc42/09-architecture-decisions.md`. Open points: `OPEN.md`.
   ES modules served from `ui/static`. UI text is German.
 - **Never "shit in, shit out".** Unexpected input is always an error —
   never guessed, defaulted or dropped. Validate at the interface where data
-  enters (HTTP forms, env, legacy import, external APIs) and back it with
+  enters (HTTP forms, env, file imports, external APIs) and back it with
   database constraints, so everything stored is known to be valid.
   Unexpected errors go to `s.fail` (logged, generic page), never swallowed.
 - **Few dependencies.** Runtime: `modernc.org/sqlite`, `golang.org/x/crypto`,
@@ -32,7 +31,7 @@ decisions: `docs/arc42/09-architecture-decisions.md`. Open points: `OPEN.md`.
 cmd/allmend          wiring, subcommands (serve, migrate, hashpw, health, demo)
 internal/<module>    domain types, services, repository interfaces
 internal/store       SQLite repositories (only cmd + tests import it)
-internal/db          open, migrate (backup, legacy attach), counts
+internal/db          open, migrate (backup, one transaction), counts
 internal/migrations  the ordered list of schema steps
 internal/webui       routing, middleware, handlers
 internal/demo        made-up data and static export for the public demo
@@ -55,7 +54,7 @@ go run ./cmd/allmend migrate --dry-run
 1. `internal/<module>`: types, service, repository interface; scope rules
    from ADR access-and-data-scope.
 2. `internal/store/<module>.go` + tests against a real database.
-3. Migration step: tables plus legacy import (if the module had data).
+3. Migration step: the module's tables.
 4. Handlers in `internal/webui/<module>.go`, routes in `Server.Handler`
    wrapped with `s.Module(...)`; templates in `ui/templates/<module>/`.
 5. Set `Ready: true` in `account.Modules`; add pages to `TestPagesRender`.

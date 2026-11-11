@@ -5,11 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
-	"os"
-	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -31,10 +27,7 @@ type Tx interface {
 
 // MigrationEnv carries the inputs migrations may need besides the database.
 type MigrationEnv struct {
-	AdminEmail     string // owner of imported legacy data
-	BaseCurrency   string // for legacy amounts without currency
-	LegacyAttached bool   // legacy database attached as schema "legacy"
-	Now            time.Time
+	Now time.Time
 }
 
 // SQL returns an Up func that executes the given statements.
@@ -48,7 +41,6 @@ func SQL(stmts string) func(context.Context, Tx, MigrationEnv) error {
 // Options control a migration run.
 type Options struct {
 	BackupDir string // where the pre-migration copy goes; required when migrations are pending
-	LegacyDB  string // optional path of the old almanach.db; attached read-only if it exists
 	Env       MigrationEnv
 }
 
@@ -68,7 +60,7 @@ const versionTable = `CREATE TABLE IF NOT EXISTS schema_migrations (
 // Migrate applies all pending migrations in one transaction. Before that it
 // writes a consistent copy of the database to BackupDir. Any error rolls the
 // transaction back; the database is then unchanged.
-func Migrate(ctx context.Context, d *sql.DB, path string, ms []Migration, opt Options) (Result, error) {
+func Migrate(ctx context.Context, d *sql.DB, ms []Migration, opt Options) (Result, error) {
 	if err := validate(ms); err != nil {
 		return Result{}, err
 	}
@@ -106,21 +98,6 @@ func Migrate(ctx context.Context, d *sql.DB, path string, ms []Migration, opt Op
 	if env.Now.IsZero() {
 		env.Now = time.Now().UTC()
 	}
-	if opt.LegacyDB != "" {
-		attached, err := attachLegacy(ctx, d, opt.LegacyDB, path)
-		if err != nil {
-			return res, err
-		}
-		env.LegacyAttached = attached
-		if attached {
-			defer func() {
-				if _, err := d.ExecContext(context.WithoutCancel(ctx), `DETACH DATABASE legacy`); err != nil {
-					slog.Error("detach legacy database", "err", err)
-				}
-			}()
-		}
-	}
-
 	tx, err := d.BeginTx(ctx, nil)
 	if err != nil {
 		return res, fmt.Errorf("db.Migrate begin: %w", err)
@@ -185,22 +162,4 @@ func checkForeignKeys(ctx context.Context, tx *sql.Tx) error {
 		return fmt.Errorf("db.Migrate: foreign key violation in %s → %s", table, parent)
 	}
 	return rows.Err()
-}
-
-func attachLegacy(ctx context.Context, d *sql.DB, legacy, own string) (bool, error) {
-	if _, err := os.Stat(legacy); errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	} else if err != nil {
-		return false, fmt.Errorf("db: stat legacy database: %w", err)
-	}
-	a, err1 := filepath.Abs(legacy)
-	b, err2 := filepath.Abs(own)
-	if err1 == nil && err2 == nil && a == b {
-		return false, errors.New("db: legacy database must not be the Allmend database")
-	}
-	uri := "file:" + strings.ReplaceAll(legacy, "?", "%3f") + "?mode=ro"
-	if _, err := d.ExecContext(ctx, `ATTACH DATABASE ? AS legacy`, uri); err != nil {
-		return false, fmt.Errorf("db: attach legacy database read-only: %w", err)
-	}
-	return true, nil
 }

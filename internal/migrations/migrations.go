@@ -1,26 +1,22 @@
 // Package migrations lists every schema step of Allmend in order.
 //
 // Rules: never change or remove a step that was released; add a new one.
-// A step that creates a module's tables also imports that module's legacy
-// data (old almanach.db, attached read-only as "legacy") in the same step.
+// Until 0.3.0 steps 3, 4, 6 and 7 also imported the old almanac data; that
+// import was removed (#8), the tables they create are unchanged.
 package migrations
 
-import (
-	"context"
-
-	"github.com/tiliavir/allmend/internal/db"
-)
+import "github.com/tiliavir/allmend/internal/db"
 
 // All returns the ordered migration list.
 func All() []db.Migration {
 	return []db.Migration{
 		{Version: 1, Name: "accounts_sessions_links", Up: db.SQL(v1)},
 		{Version: 2, Name: "pages", Up: db.SQL(v2)},
-		{Version: 3, Name: "commute", Up: v3},
-		{Version: 4, Name: "velo", Up: v4},
+		{Version: 3, Name: "commute", Up: db.SQL(v3)},
+		{Version: 4, Name: "velo", Up: db.SQL(v4)},
 		{Version: 5, Name: "schiffe", Up: db.SQL(v5)},
-		{Version: 6, Name: "places", Up: v6},
-		{Version: 7, Name: "finanzen", Up: v7},
+		{Version: 6, Name: "places", Up: db.SQL(v6)},
+		{Version: 7, Name: "finanzen", Up: db.SQL(v7)},
 		{Version: 8, Name: "ausgaben", Up: db.SQL(v8)},
 		{Version: 9, Name: "page_tree", Up: db.SQL(v9)},
 	}
@@ -109,7 +105,8 @@ CREATE TABLE page_revisions (
 ) STRICT;
 `
 
-const v3Schema = `
+// v3 creates the Arbeitswege tables.
+const v3 = `
 CREATE TABLE commute_years (
 	id              TEXT    PRIMARY KEY,
 	owner_id        TEXT    NOT NULL REFERENCES accounts(id),
@@ -141,65 +138,6 @@ CREATE TABLE commute_months (
 	PRIMARY KEY (year_id, month)
 ) STRICT;
 `
-
-// v3 creates the commute tables and imports legacy commute_years. The old app
-// applied defaults on read (distances 7.6/15/18 km when 0, statutory rates
-// when both rates were 0, threshold 20 when 0); the import stores the values
-// the old app showed.
-func v3(ctx context.Context, tx db.Tx, env db.MigrationEnv) error {
-	if _, err := tx.ExecContext(ctx, v3Schema); err != nil {
-		return err
-	}
-	ok, err := legacyTable(ctx, tx, env, "commute_years")
-	if err != nil || !ok {
-		return err
-	}
-	dist := func(f string) string {
-		return "(json_extract(data, '$." + f + "') IS NULL OR json_type(data, '$." + f + "') IN ('integer', 'real'))"
-	}
-	if err := reject(ctx, tx, "legacy.commute_years", "year missing, or a distance or rate is not a number",
-		"json_type(data, '$.year') IS NOT 'integer' OR NOT "+dist("car_dist_km")+" OR NOT "+dist("train_dist_km")+" OR NOT "+dist("bike_dist_km")+
-			" OR NOT "+dist("pendler_low_cents")+" OR NOT "+dist("pendler_high_cents")+" OR NOT "+dist("pendler_threshold_km")); err != nil {
-		return err
-	}
-	owner, err := adminID(ctx, tx, env)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `
-INSERT INTO commute_years (id, owner_id, year, version, car_dist_km, train_dist_km, bike_dist_km,
-	rate_low_cents, rate_high_cents, threshold_km, created_at, updated_at)
-SELECT id, ?, CAST(json_extract(data, '$.year') AS INTEGER), 1,
-	COALESCE(NULLIF(json_extract(data, '$.car_dist_km'), 0), 7.6),
-	COALESCE(NULLIF(json_extract(data, '$.train_dist_km'), 0), 15.0),
-	COALESCE(NULLIF(json_extract(data, '$.bike_dist_km'), 0), 18.0),
-	CASE WHEN COALESCE(json_extract(data, '$.pendler_low_cents'), 0) = 0 AND COALESCE(json_extract(data, '$.pendler_high_cents'), 0) = 0
-		THEN NULL ELSE CAST(COALESCE(json_extract(data, '$.pendler_low_cents'), 0) AS REAL) END,
-	CASE WHEN COALESCE(json_extract(data, '$.pendler_low_cents'), 0) = 0 AND COALESCE(json_extract(data, '$.pendler_high_cents'), 0) = 0
-		THEN NULL ELSE CAST(COALESCE(json_extract(data, '$.pendler_high_cents'), 0) AS REAL) END,
-	CAST(NULLIF(json_extract(data, '$.pendler_threshold_km'), 0) AS REAL),
-	created_at, updated_at
-FROM legacy.commute_years`, owner); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `
-WITH m(i) AS (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11))
-INSERT INTO commute_months (year_id, month, workdays, holidays, kurs, kompensation, unfall, krank, bike, car_train, home_office)
-SELECT y.id, m.i + 1,
-	COALESCE(json_extract(y.data, '$.workdays[' || m.i || ']'), 0),
-	COALESCE(json_extract(y.data, '$.holidays[' || m.i || ']'), 0),
-	COALESCE(json_extract(y.data, '$.kurs[' || m.i || ']'), 0),
-	COALESCE(json_extract(y.data, '$.kompensation[' || m.i || ']'), 0),
-	COALESCE(json_extract(y.data, '$.unfall[' || m.i || ']'), 0),
-	COALESCE(json_extract(y.data, '$.krank[' || m.i || ']'), 0),
-	COALESCE(json_extract(y.data, '$.bike[' || m.i || ']'), 0),
-	COALESCE(json_extract(y.data, '$.car_train[' || m.i || ']'), 0),
-	COALESCE(json_extract(y.data, '$.ho[' || m.i || ']'), 0)
-FROM legacy.commute_years y CROSS JOIN m`); err != nil {
-		return err
-	}
-	return sameCount(ctx, tx, "commute_years", "legacy.commute_years", "commute_years WHERE owner_id = ?", owner)
-}
 
 const v5 = `
 CREATE TABLE games (
