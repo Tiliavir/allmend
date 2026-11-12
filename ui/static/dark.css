@@ -27,3 +27,12 @@
 }
 .module .chip { color: #14151c; }
 .button, button.button { color: #14151c; }
+:root {
+  --cat-food_drink-b: #1b3a2f; --cat-food_drink-f: #7fd8b3; --cat-food_drink-s: #3fb98b;
+  --cat-home-b: #3a3615; --cat-home-f: #e6d66a; --cat-home-s: #c9b42a;
+  --cat-utilities-b: #173445; --cat-utilities-f: #8fcbe6; --cat-utilities-s: #4aa6cf;
+  --cat-transportation-b: #43202f; --cat-transportation-f: #f0a3c4; --cat-transportation-s: #d9649a;
+  --cat-entertainment-b: #2f2443; --cat-entertainment-f: #c9aef0; --cat-entertainment-s: #9d76d6;
+  --cat-life-b: #46281d; --cat-life-f: #f5b496; --cat-life-s: #e3875e;
+  --cat-general-b: #2a2c38; --cat-general-f: #c3c6d4; --cat-general-s: #9a9eb3;
+}

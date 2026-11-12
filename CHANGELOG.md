@@ -4,6 +4,29 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [Unreleased]
+
+### Added
+
+- Ausgaben: statistics per group – a donut by main category with year,
+  group total or own share and currency, plus the breakdown of one main
+  category into its subcategories.
+- Ausgaben: groups can be renamed and get new members; nobody is removed.
+- Ausgaben: archive of settled entries with currency and year filter.
+
+### Changed
+
+- Ausgaben: categories are a fixed list (43 subcategories in seven main
+  categories, as in Splitwise), picked from tinted cards with icons and an
+  optional search. Schema step 12 maps existing categories (Splitwise names,
+  German names, keys; empty becomes "Allgemein") and aborts naming every
+  value it cannot map – run `allmend migrate --dry-run` on a copy first.
+  The Splitwise import maps the export's categories the same way and refuses
+  unknown ones.
+- Ausgaben: the group page shows the entries since each currency was last
+  settled, a "ausgeglichen am …" row links to the older ones; filter by
+  currency instead of year.
+
 ## [0.5.0] - 2026-11-11
 
 ### Added

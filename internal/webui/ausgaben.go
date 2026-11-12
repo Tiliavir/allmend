@@ -22,6 +22,10 @@ func (s *Server) ausgabenRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /ausgaben", m(s.agList))
 	mux.Handle("POST /ausgaben", m(s.agCreateGroup))
 	mux.Handle("GET /ausgaben/{g}", m(s.agGroup))
+	mux.Handle("GET /ausgaben/{g}/bearbeiten", m(s.agEditGroup))
+	mux.Handle("POST /ausgaben/{g}/bearbeiten", m(s.agSaveGroup))
+	mux.Handle("GET /ausgaben/{g}/archiv", m(s.agArchive))
+	mux.Handle("GET /ausgaben/{g}/statistik", m(s.agStats))
 	mux.Handle("GET /ausgaben/{g}/neu", m(s.agNew))
 	mux.Handle("POST /ausgaben/{g}/eintraege", m(s.agSave))
 	mux.Handle("GET /ausgaben/{g}/eintraege/{e}", m(s.agEdit))
@@ -36,7 +40,11 @@ func (s *Server) ausgabenRoutes(mux *http.ServeMux) {
 }
 
 func (s *Server) agPage(w http.ResponseWriter, r *http.Request, status int, name, title, errMsg string, d any) {
-	s.render(w, r, status, "ausgaben/"+name, Page{Title: title, Module: account.Ausgaben, Error: errMsg, Data: d})
+	p := Page{Title: title, Module: account.Ausgaben, Error: errMsg, Data: d}
+	if name == "entry_form" || name == "recurring_form" {
+		p.Scripts = []Script{{Src: "/static/ausgaben.js", Module: true}} // category search
+	}
+	s.render(w, r, status, "ausgaben/"+name, p)
 }
 
 func (s *Server) agErr(w http.ResponseWriter, r *http.Request, err error) {
@@ -144,6 +152,61 @@ func (s *Server) agCreateGroup(w http.ResponseWriter, r *http.Request, a account
 	s.redirect(w, r, "/ausgaben/"+g.ID, "Gruppe „"+g.Name+"“ angelegt.")
 }
 
+// ── edit group ────────────────────────────────────────
+
+type agGroupForm struct {
+	Group      ausgaben.Group
+	People     []agPerson
+	Name       string
+	Candidates []agPerson // who can be added
+	Chosen     map[string]bool
+}
+
+func (s *Server) agEditGroup(w http.ResponseWriter, r *http.Request, a account.Account) {
+	g, people, ok := s.agLoad(w, r, a)
+	if !ok {
+		return
+	}
+	s.agGroupFormPage(w, r, http.StatusOK, agGroupForm{Group: g, People: people, Name: g.Name, Chosen: map[string]bool{}}, "")
+}
+
+func (s *Server) agGroupFormPage(w http.ResponseWriter, r *http.Request, status int, f agGroupForm, errMsg string) {
+	all, err := s.Accounts.Repo.List(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	for _, c := range all {
+		if !f.Group.IsMember(c.ID) && c.Status == account.Active && c.Can(account.Ausgaben) {
+			f.Candidates = append(f.Candidates, agPerson{ID: c.ID, Name: c.DisplayName()})
+		}
+	}
+	s.agPage(w, r, status, "group_form", "Gruppe bearbeiten", errMsg, f)
+}
+
+func (s *Server) agSaveGroup(w http.ResponseWriter, r *http.Request, a account.Account) {
+	g, people, ok := s.agLoad(w, r, a)
+	if !ok {
+		return
+	}
+	name := strings.TrimSpace(r.PostFormValue("name"))
+	add := r.PostForm["person"]
+	_, err := s.Ausgaben.EditGroup(r.Context(), a, g.ID, name, add)
+	if msg := agProblems(err); msg != "" {
+		chosen := map[string]bool{}
+		for _, m := range add {
+			chosen[m] = true
+		}
+		s.agGroupFormPage(w, r, http.StatusUnprocessableEntity, agGroupForm{Group: g, People: people, Name: name, Chosen: chosen}, msg)
+		return
+	}
+	if err != nil {
+		s.agErr(w, r, err)
+		return
+	}
+	s.redirect(w, r, "/ausgaben/"+g.ID, "Gruppe gespeichert.")
+}
+
 // ── group page ────────────────────────────────────────
 
 type agRow struct {
@@ -183,16 +246,46 @@ type agGroupData struct {
 	Balances   []agBalance
 	Transfers  []agTransfer
 	Recurrings []agRec
-	Years      []string
-	Year       string // "" = all
-	Rows       []agRow
-	Spent      []agSum // expenses in the shown period, per currency
-	Empty      bool    // no entries at all: offer the import
+	Currencies []string // of all entries, sorted
+	Currency   string   // filter; "" = all
+	Rows       []agRow  // open entries (after the last settled point)
+	Settled    []agSettled
+	Empty      bool // no entries at all: offer the import
 }
 
-type agSum struct {
-	Currency string
-	Amount   int64
+type agSettled struct{ ausgaben.Settled }
+
+// agRowOf prepares entry e for the table as seen by a.
+func agRowOf(e ausgaben.Entry, a account.Account, names map[string]string) agRow {
+	row := agRow{Entry: e, Payer: names[e.PaidBy], Unsplit: e.PaidBy == ""}
+	if e.Kind == ausgaben.Payment {
+		row.Receiver = names[e.Receiver()]
+	} else {
+		row.For = agFor(e.Shares, names)
+	}
+	if e.PaidBy == a.ID {
+		row.Mine += e.Amount
+	}
+	row.Mine -= e.ShareOf(a.ID)
+	return row
+}
+
+// agCurrencies lists the currencies of es, sorted.
+func agCurrencies(es []ausgaben.Entry) []string {
+	var out []string
+	for _, e := range es {
+		if !slices.Contains(out, e.Currency) {
+			out = append(out, e.Currency)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// agCurrencyFilter reads ?waehrung=; ok is false for a currency not in curs.
+func agCurrencyFilter(r *http.Request, curs []string) (string, bool) {
+	c := r.URL.Query().Get("waehrung")
+	return c, c == "" || slices.Contains(curs, c)
 }
 
 func (s *Server) agGroup(w http.ResponseWriter, r *http.Request, a account.Account) {
@@ -206,8 +299,17 @@ func (s *Server) agGroup(w http.ResponseWriter, r *http.Request, a account.Accou
 		s.fail(w, r, err)
 		return
 	}
-	d := agGroupData{Group: v.Group, People: people, Empty: len(v.Entries) == 0}
+	d := agGroupData{Group: v.Group, People: people, Empty: len(v.Entries) == 0, Currencies: agCurrencies(v.Entries)}
+	cur, ok := agCurrencyFilter(r, d.Currencies)
+	if !ok {
+		s.status(w, r, http.StatusNotFound)
+		return
+	}
+	d.Currency = cur
 	for _, b := range v.Balances {
+		if cur != "" && b.Currency != cur {
+			continue
+		}
 		ab := agBalance{Currency: b.Currency, Settled: b.Settled()}
 		for _, n := range b.Nets {
 			ab.Nets = append(ab.Nets, agNet{Name: names[n.AccountID], Me: n.AccountID == a.ID, Amount: n.Amount})
@@ -215,49 +317,85 @@ func (s *Server) agGroup(w http.ResponseWriter, r *http.Request, a account.Accou
 		d.Balances = append(d.Balances, ab)
 	}
 	for _, t := range v.Transfers {
-		d.Transfers = append(d.Transfers, agTransfer{Transfer: t, FromName: names[t.From], ToName: names[t.To], Mine: t.From == a.ID})
+		if cur == "" || t.Currency == cur {
+			d.Transfers = append(d.Transfers, agTransfer{Transfer: t, FromName: names[t.From], ToName: names[t.To], Mine: t.From == a.ID})
+		}
 	}
 	for _, x := range v.Recurrings {
 		d.Recurrings = append(d.Recurrings, agRec{Recurring: x, Payer: names[x.PaidBy], For: agFor(x.Shares, names)})
 	}
+	open, settled := ausgaben.SplitSettled(v.Entries)
+	for _, e := range open {
+		if cur == "" || e.Currency == cur {
+			d.Rows = append(d.Rows, agRowOf(e, a, names))
+		}
+	}
+	for _, st := range settled {
+		if cur == "" || st.Currency == cur {
+			d.Settled = append(d.Settled, agSettled{Settled: st})
+		}
+	}
+	s.agPage(w, r, http.StatusOK, "group", v.Group.Name, "", d)
+}
+
+// ── archive ───────────────────────────────────────────
+
+type agArchiveData struct {
+	Group      ausgaben.Group
+	Currencies []string
+	Currency   string
+	Years      []string
+	Year       string // "" = all
+	Rows       []agRow
+}
+
+// agArchive lists the settled entries (before each currency's last even
+// point), filtered by currency and year.
+func (s *Server) agArchive(w http.ResponseWriter, r *http.Request, a account.Account) {
+	v, err := s.Ausgaben.Open(r.Context(), a, r.PathValue("g"))
+	if err != nil {
+		s.agErr(w, r, err)
+		return
+	}
+	_, names, err := s.agPeople(r, a, v.Group)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	open, _ := ausgaben.SplitSettled(v.Entries)
+	isOpen := map[string]bool{}
+	for _, e := range open {
+		isOpen[e.ID] = true
+	}
+	var done []ausgaben.Entry
 	for _, e := range v.Entries {
-		if y := e.Date[:4]; !slices.Contains(d.Years, y) {
+		if !isOpen[e.ID] {
+			done = append(done, e)
+		}
+	}
+	d := agArchiveData{Group: v.Group, Currencies: agCurrencies(done)}
+	cur, ok := agCurrencyFilter(r, d.Currencies)
+	if !ok {
+		s.status(w, r, http.StatusNotFound)
+		return
+	}
+	d.Currency = cur
+	for _, e := range done {
+		if y := e.Date[:4]; (cur == "" || e.Currency == cur) && !slices.Contains(d.Years, y) {
 			d.Years = append(d.Years, y)
 		}
 	}
-	if len(d.Years) > 0 {
-		d.Year = d.Years[0]
+	d.Year = r.URL.Query().Get("jahr")
+	if d.Year != "" && !slices.Contains(d.Years, d.Year) {
+		s.status(w, r, http.StatusNotFound)
+		return
 	}
-	if q, ok := r.URL.Query()["jahr"]; ok {
-		if q[0] != "" && !slices.Contains(d.Years, q[0]) {
-			s.status(w, r, http.StatusNotFound)
-			return
+	for _, e := range done {
+		if (cur == "" || e.Currency == cur) && (d.Year == "" || strings.HasPrefix(e.Date, d.Year)) {
+			d.Rows = append(d.Rows, agRowOf(e, a, names))
 		}
-		d.Year = q[0]
 	}
-	spent := map[string]int64{}
-	for _, e := range v.Entries {
-		if d.Year != "" && !strings.HasPrefix(e.Date, d.Year) {
-			continue
-		}
-		row := agRow{Entry: e, Payer: names[e.PaidBy], Unsplit: e.PaidBy == ""}
-		if e.Kind == ausgaben.Payment {
-			row.Receiver = names[e.Receiver()]
-		} else {
-			row.For = agFor(e.Shares, names)
-			spent[e.Currency] += e.Amount
-		}
-		if e.PaidBy == a.ID {
-			row.Mine += e.Amount
-		}
-		row.Mine -= e.ShareOf(a.ID)
-		d.Rows = append(d.Rows, row)
-	}
-	for c, n := range spent {
-		d.Spent = append(d.Spent, agSum{c, n})
-	}
-	slices.SortFunc(d.Spent, func(x, y agSum) int { return strings.Compare(x.Currency, y.Currency) })
-	s.agPage(w, r, http.StatusOK, "group", v.Group.Name, "", d)
+	s.agPage(w, r, http.StatusOK, "archive", "Ausgeglichene Einträge", "", d)
 }
 
 func agFor(shares []ausgaben.Share, names map[string]string) string {
@@ -286,7 +424,6 @@ type agEntryForm struct {
 	Amount     string // raw
 	Split      agSplit
 	To         string // payment receiver
-	Categories []string
 	Currencies []string
 }
 
@@ -304,28 +441,24 @@ func (s *Server) agLoad(w http.ResponseWriter, r *http.Request, a account.Accoun
 	return g, people, true
 }
 
-// agSuggestions lists the categories and currencies used in g so far.
-func (s *Server) agSuggestions(r *http.Request, a account.Account, g ausgaben.Group) (cats, curs []string, err error) {
+// agCurrencyList lists the base currency and those used in g so far.
+func (s *Server) agCurrencyList(r *http.Request, a account.Account, g ausgaben.Group) ([]string, error) {
 	es, err := s.Ausgaben.Repo.Entries(r.Context(), a.ID, g.ID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	curs = []string{s.BaseCurrency}
+	curs := []string{s.BaseCurrency}
 	for _, e := range es {
-		if e.Category != "" && !slices.Contains(cats, e.Category) {
-			cats = append(cats, e.Category)
-		}
 		if !slices.Contains(curs, e.Currency) {
 			curs = append(curs, e.Currency)
 		}
 	}
-	slices.Sort(cats)
-	return cats, curs, nil
+	return curs, nil
 }
 
 func (s *Server) agEntryPage(w http.ResponseWriter, r *http.Request, a account.Account, status int, f agEntryForm, errMsg string) {
 	var err error
-	if f.Categories, f.Currencies, err = s.agSuggestions(r, a, f.Group); err != nil {
+	if f.Currencies, err = s.agCurrencyList(r, a, f.Group); err != nil {
 		s.fail(w, r, err)
 		return
 	}
@@ -489,7 +622,7 @@ func (s *Server) agSave(w http.ResponseWriter, r *http.Request, a account.Accoun
 		s.agEntryPage(w, r, a, http.StatusUnprocessableEntity, f, strings.Join(probs, ". ")+".")
 		return
 	}
-	saved, err := s.Ausgaben.SaveEntry(r.Context(), a, e)
+	_, err = s.Ausgaben.SaveEntry(r.Context(), a, e)
 	if msg := agProblems(err); msg != "" {
 		s.agEntryPage(w, r, a, http.StatusUnprocessableEntity, f, msg)
 		return
@@ -502,7 +635,7 @@ func (s *Server) agSave(w http.ResponseWriter, r *http.Request, a account.Accoun
 		s.agErr(w, r, err)
 		return
 	}
-	s.redirect(w, r, "/ausgaben/"+g.ID+"?jahr="+saved.Date[:4], "Gespeichert.")
+	s.redirect(w, r, "/ausgaben/"+g.ID, "Gespeichert.")
 }
 
 func (s *Server) agDelete(w http.ResponseWriter, r *http.Request, a account.Account) {
@@ -532,13 +665,12 @@ type agRecForm struct {
 	R          ausgaben.Recurring
 	Amount     string
 	Split      agSplit
-	Categories []string
 	Currencies []string
 }
 
 func (s *Server) agRecPage(w http.ResponseWriter, r *http.Request, a account.Account, status int, f agRecForm, errMsg string) {
 	var err error
-	if f.Categories, f.Currencies, err = s.agSuggestions(r, a, f.Group); err != nil {
+	if f.Currencies, err = s.agCurrencyList(r, a, f.Group); err != nil {
 		s.fail(w, r, err)
 		return
 	}
@@ -705,5 +837,5 @@ func (s *Server) agImport(w http.ResponseWriter, r *http.Request, a account.Acco
 		s.agErr(w, r, err)
 		return
 	}
-	s.redirect(w, r, "/ausgaben/"+g.ID+"?jahr=", strconv.Itoa(n)+" Einträge importiert.")
+	s.redirect(w, r, "/ausgaben/"+g.ID, strconv.Itoa(n)+" Einträge importiert.")
 }

@@ -409,7 +409,40 @@ func (s *seeder) ausgaben(f *family) error {
 		Category: "sports", Amount: 196_00, Currency: "CHF", PaidBy: f.ben.ID, Shares: []ausgaben.Share{{AccountID: f.anna.ID, Amount: 112_00}, {AccountID: f.ben.ID, Amount: 84_00}}}); err != nil {
 		return err
 	}
-	_, err = s.Ausgaben.SaveEntry(s.ctx, f.ben, ausgaben.Entry{GroupID: g.ID, Kind: ausgaben.Payment, Date: s.date(30), Description: "Ausgleich Oktober",
-		Amount: 150_00, Currency: "EUR", PaidBy: f.ben.ID, Shares: []ausgaben.Share{{AccountID: f.anna.ID, Amount: 150_00}}})
-	return err
+	// Six weeks ago the EUR balance was settled: the group page shows the
+	// entries since then, older ones are in the archive.
+	v, err := s.Ausgaben.Open(s.ctx, f.anna, g.ID)
+	if err != nil {
+		return err
+	}
+	// The payment's day must have no other entry, or the order within the
+	// day would decide whether it settles.
+	used := map[string]bool{}
+	for _, e := range v.Entries {
+		used[e.Date] = true
+	}
+	ago := 42
+	for used[s.date(ago)] {
+		ago++
+	}
+	cut := s.date(ago)
+	var before []ausgaben.Entry
+	for _, e := range v.Entries {
+		if e.Currency == "EUR" && e.Date < cut {
+			before = append(before, e)
+		}
+	}
+	for _, b := range ausgaben.Balances(g, before) {
+		for _, t := range ausgaben.Settle(b) {
+			payer := f.anna
+			if t.From == f.ben.ID {
+				payer = f.ben
+			}
+			if _, err := s.Ausgaben.SaveEntry(s.ctx, payer, ausgaben.Entry{GroupID: g.ID, Kind: ausgaben.Payment, Date: cut, Description: "Ausgleich",
+				Amount: t.Amount, Currency: t.Currency, PaidBy: t.From, Shares: []ausgaben.Share{{AccountID: t.To, Amount: t.Amount}}}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

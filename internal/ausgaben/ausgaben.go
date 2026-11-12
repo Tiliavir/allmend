@@ -28,7 +28,7 @@ const (
 type Group struct {
 	ID        string
 	Name      string
-	Members   []string // account ids in display order; fixed after creation
+	Members   []string // account ids in display order; members are added, never removed
 	CreatedBy string
 	CreatedAt time.Time
 	UpdatedAt time.Time

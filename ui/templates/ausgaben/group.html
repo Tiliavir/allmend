@@ -3,7 +3,11 @@
 <div class="page-title"><h1>{{$g.Name}}</h1>
 <div class="actions"><a class="button secondary" href="/ausgaben/{{$g.ID}}/neu?art=zahlung">Zahlung</a><a class="button" href="/ausgaben/{{$g.ID}}/neu">Ausgabe erfassen</a></div>
 </div>
-<p class="muted small"><a href="/ausgaben">Alle Gruppen</a> · {{range $i, $p := $d.People}}{{if $i}}, {{end}}{{$p.Name}}{{end}}</p>
+<p class="muted small"><a href="/ausgaben">Alle Gruppen</a> · {{range $i, $p := $d.People}}{{if $i}}, {{end}}{{$p.Name}}{{end}} · <a href="/ausgaben/{{$g.ID}}/bearbeiten">Bearbeiten</a>{{if not $d.Empty}} · <a href="/ausgaben/{{$g.ID}}/statistik">Statistik</a>{{end}}</p>
+{{if gt (len $d.Currencies) 1}}<form class="filters" method="get" action="/ausgaben/{{$g.ID}}">
+<label>Währung<select name="waehrung"><option value=""{{if eq "" $d.Currency}} selected{{end}}>Alle</option>{{range $d.Currencies}}<option value="{{.}}"{{if eq . $d.Currency}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+<button class="button secondary" type="submit">Anzeigen</button>
+</form>{{end}}
 <section class="section" aria-labelledby="saldo">
 <h2 id="saldo">Saldo</h2>
 {{if $d.Balances}}<div class="stats">
@@ -23,21 +27,11 @@
 </section>
 <section class="section" aria-labelledby="eintraege">
 <h2 id="eintraege">Einträge</h2>
-{{if $d.Years}}<form class="filters" method="get" action="/ausgaben/{{$g.ID}}">
-<label>Jahr<select name="jahr">{{range $d.Years}}<option value="{{.}}"{{if eq . $d.Year}} selected{{end}}>{{.}}</option>{{end}}<option value=""{{if eq "" $d.Year}} selected{{end}}>Alle</option></select></label>
-<button class="button secondary" type="submit">Anzeigen</button>
-</form>
-{{if $d.Spent}}<p class="muted small">Ausgaben {{if $d.Year}}{{$d.Year}}{{else}}gesamt{{end}}: {{range $i, $s := $d.Spent}}{{if $i}} · {{end}}{{money $s.Amount $s.Currency}}{{end}}</p>{{end}}
-<div class="card table-wrap"><table class="entries">
+{{if not $d.Empty}}<div class="card table-wrap"><table class="entries">
 <thead><tr><th scope="col">Datum</th><th scope="col">Beschreibung</th><th scope="col">Bezahlt</th><th scope="col">Für</th><th scope="col" class="num">Betrag</th><th scope="col" class="num">Für dich</th></tr></thead>
-<tbody>{{range $d.Rows}}<tr{{if eq .Kind "zahlung"}} class="payment"{{end}}><td>{{dateDE .Date}}</td>
-<td><a href="/ausgaben/{{$g.ID}}/eintraege/{{.ID}}">{{if .Description}}{{.Description}}{{else}}Zahlung{{end}}</a>{{if .Category}} <span class="badge">{{.Category}}</span>{{end}}{{if .RecurringID}} <span class="badge">monatlich</span>{{end}}</td>
-<td>{{if .Unsplit}}–{{else}}{{.Payer}}{{end}}</td>
-<td>{{if eq .Kind "zahlung"}}→ {{.Receiver}}{{else if .Unsplit}}<span class="muted">nicht geteilt</span>{{else}}{{.For}}{{end}}</td>
-<td class="num">{{money .Amount .Currency}}</td>
-<td class="num {{gaincls .Mine}}">{{if .Mine}}{{money .Mine .Currency}}{{else}}–{{end}}</td></tr>
-{{else}}<tr><td colspan="6" class="muted">Keine Einträge in {{$d.Year}}.</td></tr>
-{{end}}</tbody></table></div>
+<tbody>{{range $d.Rows}}{{template "agrow" .}}{{end}}
+{{range $d.Settled}}<tr class="ag-settled"><td colspan="6">{{icon "check"}} {{.Currency}} ausgeglichen am {{dateDE .Date}} · <a href="/ausgaben/{{$g.ID}}/archiv?waehrung={{.Currency}}">{{.Count}} ältere {{if eq .Count 1}}Eintrag{{else}}Einträge{{end}}</a></td></tr>
+{{end}}{{if and (not $d.Rows) (not $d.Settled)}}<tr><td colspan="6" class="muted">Keine Einträge in {{$d.Currency}}.</td></tr>{{end}}</tbody></table></div>
 {{end}}
 {{if $d.Empty}}<details class="card"><summary>Aus Splitwise importieren</summary>
 <form class="stack" method="post" action="/ausgaben/{{$g.ID}}/import" enctype="multipart/form-data">

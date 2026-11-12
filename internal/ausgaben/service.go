@@ -19,6 +19,8 @@ type Repository interface {
 	Groups(ctx context.Context, member string) ([]Group, error) // by name
 	Group(ctx context.Context, member, groupID string) (Group, error)
 	InsertGroup(ctx context.Context, g Group) error
+	// UpdateGroup renames a group of member and appends add to its members.
+	UpdateGroup(ctx context.Context, member, groupID, name string, add []string, at time.Time) error
 
 	// Entries lists the group's entries that are not deleted, newest first.
 	Entries(ctx context.Context, member, groupID string) ([]Entry, error)
@@ -79,16 +81,8 @@ func (s *Service) CreateGroup(ctx context.Context, a account.Account, name strin
 	}
 	p.add(len(all) < MinMembers, "Mindestens eine weitere Person wählen")
 	p.add(len(all) > MaxMembers, "Zu viele Personen")
-	for _, m := range all[1:] {
-		o, err := s.Accounts.Get(ctx, m)
-		if errors.Is(err, account.ErrNotFound) {
-			p.add(true, "Unbekannte Person")
-			continue
-		}
-		if err != nil {
-			return Group{}, err
-		}
-		p.add(o.Status != account.Active || !o.Can(account.Ausgaben), o.DisplayName()+" hat keinen Zugriff auf Ausgaben")
+	if err := s.checkCandidates(ctx, &p, all[1:]); err != nil {
+		return Group{}, err
 	}
 	if err := p.Err(); err != nil {
 		return Group{}, err
@@ -96,6 +90,51 @@ func (s *Service) CreateGroup(ctx context.Context, a account.Account, name strin
 	now := s.now()
 	g := Group{ID: id.New(), Name: name, Members: all, CreatedBy: a.ID, CreatedAt: now, UpdatedAt: now}
 	return g, s.Repo.InsertGroup(ctx, g)
+}
+
+// EditGroup renames g and adds members; nobody is ever removed. New
+// members must be active and have access to the module.
+func (s *Service) EditGroup(ctx context.Context, a account.Account, groupID, name string, add []string) (Group, error) {
+	g, err := s.Repo.Group(ctx, a.ID, groupID)
+	if err != nil {
+		return g, err
+	}
+	var p Problems
+	checkGroupName(&p, name)
+	var fresh []string
+	for _, m := range add {
+		p.add(g.IsMember(m), "Diese Person ist schon dabei")
+		p.add(slices.Contains(fresh, m), "Eine Person zweimal gewählt")
+		fresh = append(fresh, m)
+	}
+	p.add(len(g.Members)+len(fresh) > MaxMembers, "Zu viele Personen")
+	if err := s.checkCandidates(ctx, &p, fresh); err != nil {
+		return g, err
+	}
+	if err := p.Err(); err != nil {
+		return g, err
+	}
+	if err := s.Repo.UpdateGroup(ctx, a.ID, g.ID, name, fresh, s.now()); err != nil {
+		return g, err
+	}
+	g.Name, g.Members = name, append(g.Members, fresh...)
+	return g, nil
+}
+
+// checkCandidates checks that ids are active accounts with module access.
+func (s *Service) checkCandidates(ctx context.Context, p *Problems, ids []string) error {
+	for _, m := range ids {
+		o, err := s.Accounts.Get(ctx, m)
+		if errors.Is(err, account.ErrNotFound) {
+			p.add(true, "Unbekannte Person")
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		p.add(o.Status != account.Active || !o.Can(account.Ausgaben), o.DisplayName()+" hat keinen Zugriff auf Ausgaben")
+	}
+	return nil
 }
 
 // View is one group with everything the group page shows.

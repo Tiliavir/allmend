@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 var grp = Group{ID: "g", Members: []string{"anna", "ben", "mia"}}
@@ -278,5 +279,67 @@ func TestCategories(t *testing.T) {
 	}
 	if s, _ := FromSplitwise("Uncategorized"); s.Key != "general" {
 		t.Errorf("Uncategorized -> %q", s.Key)
+	}
+}
+
+func TestSplitSettled(t *testing.T) {
+	two := Group{ID: "g", Members: []string{"anna", "ben"}}
+	at := func(m int) time.Time { return time.Date(2026, 1, 1, 0, m, 0, 0, time.UTC) }
+	exp := func(id, date, cur, payer string, amt int64, m int) Entry {
+		e := Entry{ID: id, Date: date, Currency: cur, Kind: Expense, Amount: amt, CreatedAt: at(m)}
+		if payer != "" {
+			e.PaidBy, e.Shares = payer, Equal(two, amt, payer, two.Members)
+		}
+		return e
+	}
+	pay := func(id, date, cur, from, to string, amt int64, m int) Entry {
+		return Entry{ID: id, Date: date, Currency: cur, Kind: Payment, Amount: amt, PaidBy: from, Shares: []Share{{to, amt}}, CreatedAt: at(m)}
+	}
+	es := []Entry{ // newest first, as the repository returns them
+		exp("e5", "2026-03-01", "EUR", "anna", 1000, 9),
+		exp("c2", "2026-02-20", "CHF", "ben", 800, 8),
+		pay("p1", "2026-02-10", "EUR", "ben", "anna", 600, 7),
+		exp("u1", "2026-02-05", "EUR", "", 999, 6), // unsplit: no effect
+		exp("e2", "2026-02-01", "EUR", "anna", 400, 5),
+		exp("e1", "2026-01-15", "EUR", "anna", 800, 4),
+	}
+	open, st := SplitSettled(es)
+	ids := func(es []Entry) (out []string) {
+		for _, e := range es {
+			out = append(out, e.ID)
+		}
+		return out
+	}
+	if got := ids(open); !slices.Equal(got, []string{"e5", "c2"}) {
+		t.Errorf("open %v", got)
+	}
+	if len(st) != 1 || st[0] != (Settled{"EUR", "2026-02-10", 4}) {
+		t.Errorf("settled %+v", st)
+	}
+	// A back-dated expense before the payment reopens everything in EUR.
+	es = append(es, exp("b1", "2026-01-20", "EUR", "ben", 200, 10))
+	open, st = SplitSettled(es)
+	if len(open) != 7 || len(st) != 0 {
+		t.Errorf("after back-dated entry: %v %+v", ids(open), st)
+	}
+}
+
+func TestSpending(t *testing.T) {
+	es := []Entry{
+		{Kind: Expense, Date: "2026-01-02", Currency: "EUR", Category: "groceries", Amount: 1000, PaidBy: "anna", Shares: []Share{{"anna", 600}, {"ben", 400}}},
+		{Kind: Expense, Date: "2026-02-02", Currency: "EUR", Category: "groceries", Amount: 500, PaidBy: "ben", Shares: []Share{{"ben", 500}}},
+		{Kind: Expense, Date: "2025-12-31", Currency: "EUR", Category: "rent", Amount: 9000, PaidBy: "anna", Shares: []Share{{"anna", 4500}, {"ben", 4500}}},
+		{Kind: Expense, Date: "2026-03-01", Currency: "EUR", Category: "music", Amount: 499}, // unsplit
+		{Kind: Expense, Date: "2026-03-01", Currency: "CHF", Category: "groceries", Amount: 700, PaidBy: "anna", Shares: []Share{{"anna", 700}}},
+		{Kind: Payment, Date: "2026-03-02", Currency: "EUR", Amount: 100, PaidBy: "ben", Shares: []Share{{"anna", 100}}},
+	}
+	if got := Spending(es, "EUR", "2026", ""); len(got) != 2 || got["groceries"] != 1500 || got["music"] != 499 {
+		t.Errorf("group 2026: %v", got)
+	}
+	if got := Spending(es, "EUR", "", "anna"); len(got) != 2 || got["groceries"] != 600 || got["rent"] != 4500 {
+		t.Errorf("anna all years: %v", got)
+	}
+	if got := Spending(es, "CHF", "2025", ""); len(got) != 0 {
+		t.Errorf("CHF 2025: %v", got)
 	}
 }

@@ -10,7 +10,7 @@
 {{if $d.Candidates}}<fieldset><legend>Mit wem?</legend>
 {{range $d.Candidates}}<label class="check"><input type="checkbox" name="person" value="{{.ID}}"{{if index $d.Chosen .ID}} checked{{end}}>{{.Name}}</label>
 {{end}}</fieldset>
-<p class="muted small">Du bist immer dabei. Die Personen lassen sich später nicht mehr ändern. Nur sie sehen die Gruppe.</p>
+<p class="muted small">Du bist immer dabei. Später lassen sich Personen hinzufügen, aber nicht entfernen. Nur sie sehen die Gruppe.</p>
 <div class="actions"><button class="button" type="submit">Anlegen</button></div>
 {{else}}<p class="muted small">Niemand sonst hat Zugriff auf Ausgaben. Ein Admin kann ihn geben.</p>{{end}}
 </form></details>

@@ -35,8 +35,9 @@ Status: Accepted
   "ausgeglichen am …" linking to an archive view with a year filter. The
   point is computed on every request, never stored, so a back-dated entry
   moves it automatically. The page filters by currency (all or one).
-- **Statistics** per group on their own page: a donut chart (CSS
-  `conic-gradient`, no JS) of expenses by main category, filters for year
+- **Statistics** per group on their own page: a donut chart (inline SVG,
+  no JS; colours via CSS classes, as the CSP forbids inline styles) of
+  expenses by main category, filters (links) for year
   (or all), group total or own share, and currency (never converted); a
   main category breaks down into its subcategories. Payments do not count;
   unsplit imported entries count in the group total, not in the own share.

@@ -133,6 +133,28 @@ func (r *Ausgaben) InsertGroup(ctx context.Context, g ausgaben.Group) error {
 	return tx.Commit()
 }
 
+// UpdateGroup renames a group of member and appends add to its members.
+func (r *Ausgaben) UpdateGroup(ctx context.Context, member, groupID, name string, add []string, at time.Time) error {
+	tx, err := r.s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := r.member(ctx, tx, member, groupID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE expense_groups SET name = ?, updated_at = ? WHERE id = ?`, name, fmtTime(at), groupID); err != nil {
+		return fmt.Errorf("store.Ausgaben.UpdateGroup: %w", err)
+	}
+	for _, m := range add {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO expense_members (group_id, account_id, position)
+SELECT ?, ?, COALESCE(MAX(position), -1) + 1 FROM expense_members WHERE group_id = ?`, groupID, m, groupID); err != nil {
+			return fmt.Errorf("store.Ausgaben.UpdateGroup member: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
 // ── entries ───────────────────────────────────────────
 
 const (

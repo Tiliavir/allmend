@@ -1,0 +1,17 @@
+{{define "content"}}
+{{$d := .Data}}{{$g := $d.Group}}
+<div class="page-title"><h1>{{.Title}}</h1><a class="button secondary" href="/ausgaben/{{$g.ID}}">Abbrechen</a></div>
+<form class="stack" method="post" action="/ausgaben/{{$g.ID}}/bearbeiten">
+<label>Name<input type="text" name="name" maxlength="60" required value="{{$d.Name}}"></label>
+<fieldset><legend>Dabei</legend>
+<p>{{range $i, $p := $d.People}}{{if $i}} · {{end}}{{$p.Name}}{{if $p.Me}} (du){{end}}{{end}}</p>
+<p class="muted small">Wer dabei ist, bleibt dabei – auch mit Saldo 0.</p>
+</fieldset>
+<fieldset><legend>Hinzufügen</legend>
+{{range $d.Candidates}}<label class="check"><input type="checkbox" name="person" value="{{.ID}}"{{if index $d.Chosen .ID}} checked{{end}}>{{.Name}}</label>
+{{else}}<p class="muted small">Niemand sonst hat Zugriff auf Ausgaben. Ein Admin kann ihn geben.</p>
+{{end}}{{if $d.Candidates}}<p class="muted small">Neue Personen sehen alle bisherigen Einträge der Gruppe. Bestehende Anteile und Salden bleiben unverändert; neue Personen starten mit Saldo 0.</p>{{end}}
+</fieldset>
+<div class="actions"><button class="button" type="submit">Speichern</button></div>
+</form>
+{{end}}

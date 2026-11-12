@@ -174,3 +174,94 @@ func Due(r Recurring, today string) (dates []string, next string) {
 	}
 	return dates, next
 }
+
+// Settled is where a currency was last even: the balance of everyone was
+// zero after the first Count entries of that currency (oldest first).
+type Settled struct {
+	Currency string
+	Date     string // date of the entry that evened it
+	Count    int    // entries up to and including that one
+}
+
+// SplitSettled separates the entries after the last point at which their
+// currency's balance was zero for everyone ("open") from those before it.
+// es may come in any order; open keeps the order of es. Entries are ordered
+// by date, then creation time, then id. Unsplit entries do not change a
+// balance; before such a point they count as settled. A currency that was
+// never even has no Settled. Nothing is stored: a back-dated entry moves the
+// point by itself.
+func SplitSettled(es []Entry) (open []Entry, settled []Settled) {
+	byCur := map[string][]Entry{}
+	for _, e := range es {
+		byCur[e.Currency] = append(byCur[e.Currency], e)
+	}
+	done := map[string]bool{}
+	for cur, list := range byCur {
+		list = slices.Clone(list)
+		slices.SortStableFunc(list, func(a, b Entry) int {
+			if c := cmp.Compare(a.Date, b.Date); c != 0 {
+				return c
+			}
+			if c := a.CreatedAt.Compare(b.CreatedAt); c != 0 {
+				return c
+			}
+			return cmp.Compare(a.ID, b.ID)
+		})
+		nets := map[string]int64{}
+		last := -1
+		for i, e := range list {
+			if e.PaidBy == "" {
+				continue
+			}
+			nets[e.PaidBy] += e.Amount
+			for _, s := range e.Shares {
+				nets[s.AccountID] -= s.Amount
+			}
+			even := true
+			for _, n := range nets {
+				if n != 0 {
+					even = false
+					break
+				}
+			}
+			if even {
+				last = i
+			}
+		}
+		if last < 0 {
+			continue
+		}
+		settled = append(settled, Settled{Currency: cur, Date: list[last].Date, Count: last + 1})
+		for _, e := range list[:last+1] {
+			done[e.ID] = true
+		}
+	}
+	slices.SortFunc(settled, func(a, b Settled) int { return cmp.Compare(a.Currency, b.Currency) })
+	for _, e := range es {
+		if !done[e.ID] {
+			open = append(open, e)
+		}
+	}
+	return open, settled
+}
+
+// Spending sums the expenses in currency per subcategory key. year ("YYYY")
+// limits to one year, "" means all. With viewer set it sums that member's
+// shares (unsplit expenses count nothing), otherwise the full amounts.
+// Payments never count.
+func Spending(es []Entry, currency, year, viewer string) map[string]int64 {
+	out := map[string]int64{}
+	for _, e := range es {
+		if e.Kind != Expense || e.Currency != currency || (year != "" && e.Date[:4] != year) {
+			continue
+		}
+		n := e.Amount
+		if viewer != "" {
+			n = e.ShareOf(viewer)
+		}
+		if n != 0 {
+			out[e.Category] += n
+		}
+	}
+	return out
+}
