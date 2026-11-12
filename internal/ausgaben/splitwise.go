@@ -23,6 +23,8 @@ import (
 // A person's column is their net effect: what they paid minus their share.
 // Category "Payment" marks a payment between two people. Rows where every
 // net is zero had no effect on anyone (Splitwise does not export who paid).
+// Other categories are mapped to the fixed list (FromSplitwise); an unknown
+// one is an error.
 
 const maxImportRows = 100_000
 
@@ -229,9 +231,11 @@ func swEntry(g Group, rec, ids []string, nets []int64) (Entry, string) {
 		}
 		return e, ""
 	}
-	if e.Category == "" {
-		return e, "Kategorie fehlt"
+	sub, ok := FromSplitwise(e.Category)
+	if !ok {
+		return e, fmt.Sprintf("Kategorie „%s“ unbekannt", e.Category)
 	}
+	e.Category = sub.Key
 	if payer < 0 {
 		return e, "" // nobody affected: nicht geteilt
 	}

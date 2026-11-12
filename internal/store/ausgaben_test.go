@@ -50,7 +50,7 @@ func TestAusgabenGroupsAndEntries(t *testing.T) {
 	if len(g.Members) != 2 || g.Members[0] != "anna" {
 		t.Fatalf("members %v", g.Members)
 	}
-	e, err := svc.SaveEntry(ctx, ben, ausgaben.Entry{GroupID: g.ID, Kind: ausgaben.Expense, Date: "2026-03-01", Description: "Markt", Category: "Essen",
+	e, err := svc.SaveEntry(ctx, ben, ausgaben.Entry{GroupID: g.ID, Kind: ausgaben.Expense, Date: "2026-03-01", Description: "Markt", Category: "groceries",
 		Amount: 1839, Currency: "EUR", PaidBy: "ben", Shares: ausgaben.Equal(g, 1839, "ben", g.Members)})
 	if err != nil {
 		t.Fatal(err)
@@ -133,7 +133,7 @@ func TestAusgabenRecurringBooking(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := ausgaben.Recurring{GroupID: g.ID, Description: "Strom", Category: "Energie", Amount: 9000, Currency: "EUR", PaidBy: "anna",
+	r := ausgaben.Recurring{GroupID: g.ID, Description: "Strom", Category: "electricity", Amount: 9000, Currency: "EUR", PaidBy: "anna",
 		Shares: ausgaben.Equal(g, 9000, "anna", g.Members), Day: 31, Next: "2026-01-31"}
 	if r, err = svc.SaveRecurring(ctx, anna, r); err != nil {
 		t.Fatal(err)

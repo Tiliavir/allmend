@@ -104,7 +104,7 @@ func TestRecurringDates(t *testing.T) {
 }
 
 func TestCheckEntry(t *testing.T) {
-	ok := Entry{GroupID: "g", Kind: Expense, Date: "2026-01-02", Description: "Markt", Amount: 1000, Currency: "EUR", PaidBy: "anna", Shares: []Share{{"anna", 500}, {"ben", 500}}}
+	ok := Entry{GroupID: "g", Kind: Expense, Date: "2026-01-02", Description: "Markt", Category: "groceries", Amount: 1000, Currency: "EUR", PaidBy: "anna", Shares: []Share{{"anna", 500}, {"ben", 500}}}
 	if err := CheckEntry(grp, ok); err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestCheckEntry(t *testing.T) {
 	if err := CheckEntry(grp, pay); err != nil {
 		t.Fatal(err)
 	}
-	unsplit := Entry{GroupID: "g", Kind: Expense, Date: "2026-01-02", Description: "Abo", Category: "Musik", Amount: 499, Currency: "EUR"}
+	unsplit := Entry{GroupID: "g", Kind: Expense, Date: "2026-01-02", Description: "Abo", Category: "music", Amount: 499, Currency: "EUR"}
 	if err := CheckEntry(grp, unsplit); err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,9 @@ func TestCheckEntry(t *testing.T) {
 		"long":       func(e *Entry) { e.Description = strings.Repeat("x", MaxDescLen+1) },
 		"self pay":   func(e *Entry) { e.Kind, e.Description, e.Shares = Payment, "", []Share{{"anna", 1000}} },
 		"pay two":    func(e *Entry) { e.Kind, e.Description = Payment, "" },
-		"pay cat":    func(e *Entry) { e.Kind, e.Category, e.Shares = Payment, "Essen", []Share{{"ben", 1000}} },
+		"pay cat":    func(e *Entry) { e.Kind, e.Category, e.Shares = Payment, "groceries", []Share{{"ben", 1000}} },
+		"no cat":     func(e *Entry) { e.Category = "" },
+		"free cat":   func(e *Entry) { e.Category = "Essen" },
 		"unsplit sh": func(e *Entry) { e.PaidBy = "" },
 	}
 	for name, mod := range bad {
@@ -148,7 +150,7 @@ func TestCheckEntry(t *testing.T) {
 }
 
 func TestCheckRecurring(t *testing.T) {
-	r := Recurring{GroupID: "g", Description: "Miete", Amount: 120000, Currency: "CHF", PaidBy: "anna", Shares: Equal(grp, 120000, "anna", []string{"anna", "ben"}), Day: 31, Next: "2026-02-28"}
+	r := Recurring{GroupID: "g", Description: "Miete", Category: "rent", Amount: 120000, Currency: "CHF", PaidBy: "anna", Shares: Equal(grp, 120000, "anna", []string{"anna", "ben"}), Day: 31, Next: "2026-02-28"}
 	if err := CheckRecurring(grp, r); err != nil {
 		t.Fatal(err)
 	}
@@ -159,6 +161,10 @@ func TestCheckRecurring(t *testing.T) {
 	r.Next, r.Day = "2026-02-28", 0
 	if CheckRecurring(grp, r) == nil {
 		t.Error("day 0 accepted")
+	}
+	r.Day, r.Category = 28, "Wohnen"
+	if CheckRecurring(grp, r) == nil {
+		t.Error("free-text category accepted")
 	}
 }
 
@@ -203,6 +209,9 @@ func TestParseSplitwise(t *testing.T) {
 	if a := es[3]; a.PaidBy != "" || a.Shares != nil || a.Kind != Expense {
 		t.Errorf("not shared: %+v", a)
 	}
+	if cats := []string{es[0].Category, es[1].Category, es[2].Category, es[3].Category, es[5].Category}; !slices.Equal(cats, []string{"groceries", "electricity", "sports", "music", "entertainment_other"}) {
+		t.Errorf("categories %v", cats)
+	}
 	if p := es[4]; p.Kind != Payment || p.PaidBy != "ben" || p.Receiver() != "anna" || p.Category != "" {
 		t.Errorf("payment: %+v", p)
 	}
@@ -233,6 +242,7 @@ func TestParseSplitwiseRejects(t *testing.T) {
 		"after total":  {swFile + "2025-02-02,Brot,Groceries,3.00,EUR,1.50,-1.50,0.00\n", swNames, "nach dem Saldo"},
 		"fields":       {strings.Replace(swFile, "-10.00,-10.00\n", "-10.00\n", 1), swNames, "Felder"},
 		"no category":  {strings.Replace(swFile, "Strom,Electricity", "Strom,", 1), swNames, "Kategorie"},
+		"unknown cat":  {strings.Replace(swFile, "Strom,Electricity", "Strom,Energie", 1), swNames, "Kategorie „Energie“ unbekannt"},
 	}
 	for name, c := range cases {
 		_, err := ParseSplitwise(strings.NewReader(c.file), grp, c.names)
@@ -244,5 +254,29 @@ func TestParseSplitwiseRejects(t *testing.T) {
 		if !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %q does not mention %q", name, err, c.want)
 		}
+	}
+}
+
+func TestCategories(t *testing.T) {
+	n := 0
+	for _, m := range Mains {
+		for _, s := range m.Subs {
+			n++
+			if got, ok := MainOf(s.Key); !ok || got.Key != m.Key {
+				t.Errorf("%s: main %v", s.Key, got.Key)
+			}
+			if got, ok := FromSplitwise(s.Splitwise); !ok || got.Key != s.Key {
+				t.Errorf("%s: splitwise %q", s.Key, s.Splitwise)
+			}
+		}
+	}
+	if n != 43 {
+		t.Errorf("%d subcategories, want 43", n)
+	}
+	if _, ok := Category("Essen"); ok {
+		t.Error("free text accepted as category")
+	}
+	if s, _ := FromSplitwise("Uncategorized"); s.Key != "general" {
+		t.Errorf("Uncategorized -> %q", s.Key)
 	}
 }

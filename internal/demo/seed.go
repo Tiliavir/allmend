@@ -382,8 +382,8 @@ func (s *seeder) ausgaben(f *family) error {
 		payer     account.Account
 		day       int
 	}{
-		{"Miete", "Wohnen", 1_480_00, f.anna, 1},
-		{"Strom", "Energie", 86_00, f.ben, 28},
+		{"Miete", "rent", 1_480_00, f.anna, 1},
+		{"Strom", "electricity", 86_00, f.ben, 28},
 	} {
 		next := ausgaben.Clamp(first.Format("2006-01"), r.day)
 		if _, err := s.Ausgaben.SaveRecurring(s.ctx, r.payer, ausgaben.Recurring{GroupID: g.ID, Description: r.desc, Category: r.cat,
@@ -391,7 +391,7 @@ func (s *seeder) ausgaben(f *family) error {
 			return err
 		}
 	}
-	shops := []struct{ desc, cat string }{{"Wochenmarkt", "Lebensmittel"}, {"Grossverteiler", "Lebensmittel"}, {"Drogerie", "Haushalt"}, {"Baumarkt", "Wohnen"}, {"Tierarzt", "Haustier"}}
+	shops := []struct{ desc, cat string }{{"Wochenmarkt", "groceries"}, {"Grossverteiler", "groceries"}, {"Drogerie", "household_supplies"}, {"Baumarkt", "maintenance"}, {"Tierarzt", "pets"}, {"Pizzeria", "dining_out"}, {"Kino", "movies"}, {"Tankstelle", "gas_fuel"}}
 	for i := 0; i < 24; i++ {
 		sh := shops[s.rnd.IntN(len(shops))]
 		payer := f.anna
@@ -406,7 +406,7 @@ func (s *seeder) ausgaben(f *family) error {
 	}
 	// A ski weekend in Switzerland, paid by Ben, Anna's share is bigger.
 	if _, err := s.Ausgaben.SaveEntry(s.ctx, f.ben, ausgaben.Entry{GroupID: g.ID, Kind: ausgaben.Expense, Date: s.date(40), Description: "Skipass",
-		Category: "Freizeit", Amount: 196_00, Currency: "CHF", PaidBy: f.ben.ID, Shares: []ausgaben.Share{{AccountID: f.anna.ID, Amount: 112_00}, {AccountID: f.ben.ID, Amount: 84_00}}}); err != nil {
+		Category: "sports", Amount: 196_00, Currency: "CHF", PaidBy: f.ben.ID, Shares: []ausgaben.Share{{AccountID: f.anna.ID, Amount: 112_00}, {AccountID: f.ben.ID, Amount: 84_00}}}); err != nil {
 		return err
 	}
 	_, err = s.Ausgaben.SaveEntry(s.ctx, f.ben, ausgaben.Entry{GroupID: g.ID, Kind: ausgaben.Payment, Date: s.date(30), Description: "Ausgleich Oktober",
