@@ -21,4 +21,4 @@
 | [Ausgaben (shared expenses, Splitwise replacement)](adr/ADR-20261109-ausgaben.md) | Proposed |
 | [Schiffe versenken: Seeminen and drag-and-drop setup](adr/ADR-20261111-sea-mines.md) | Proposed |
 | [Deleting accounts, colour scheme per account](adr/ADR-20261111-account-deletion-and-theme.md) | Proposed |
-| [Offline with a service worker and an outbox](adr/ADR-20261112-offline.md) | Proposed |
+| [Offline with a service worker and an outbox](adr/ADR-20261112-offline.md) | Accepted |

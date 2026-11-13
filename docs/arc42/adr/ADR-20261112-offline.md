@@ -1,6 +1,6 @@
 # ADR-20261112: Offline with a service worker and an outbox
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 Allmend should keep working when the server is unreachable, e.g. away from
