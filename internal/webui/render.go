@@ -260,6 +260,15 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, name
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if p.Account != nil {
+		// The service worker caches only pages with this header and drops
+		// its cache when the account changes (ADR offline).
+		w.Header().Set(hdrAccount, p.Account.ID)
+	}
+	if p.Flash != "" || p.Error != "" {
+		// One-time messages must not reappear in an offline copy.
+		w.Header().Set("Cache-Control", "no-store")
+	}
 	w.WriteHeader(status)
 	_, _ = buf.WriteTo(w)
 }

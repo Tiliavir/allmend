@@ -36,6 +36,7 @@ import (
 	"github.com/tiliavir/allmend/internal/google"
 	"github.com/tiliavir/allmend/internal/links"
 	"github.com/tiliavir/allmend/internal/migrations"
+	"github.com/tiliavir/allmend/internal/offline"
 	"github.com/tiliavir/allmend/internal/pages"
 	"github.com/tiliavir/allmend/internal/password"
 	"github.com/tiliavir/allmend/internal/quotes"
@@ -196,6 +197,7 @@ func newServer(st *store.Store, accounts *account.Service, baseCurrency string, 
 		Finanzen:     &finanzen.Service{Repo: st.Finanzen(), Market: st.Finanzen(), Base: baseCurrency},
 		Schiffe:      &schiffe.Service{Repo: st.Schiffe(), Accounts: st.Accounts()},
 		Ausgaben:     &ausgaben.Service{Repo: st.Ausgaben(), Accounts: st.Accounts(), Loc: loc},
+		Offline:      &offline.Service{Repo: st.Offline()},
 		Places:       st.Places(),
 		BaseCurrency: baseCurrency,
 		Sessions:     &session.Manager{Repo: st.Sessions(), Secure: secureCookie},

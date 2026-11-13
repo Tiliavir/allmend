@@ -171,6 +171,8 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	// Offline copies and the outbox stay on no shared device (ADR offline).
+	w.Header().Set("Clear-Site-Data", `"cache", "storage"`)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 

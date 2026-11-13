@@ -1,0 +1,18 @@
+{{define "content"}}
+<h1>Nicht übertragen</h1>
+<p class="muted">Einträge, die du offline erfasst hast. Sie werden der Reihe nach übertragen, sobald Allmend erreichbar ist. Was der Server ablehnt, bleibt hier, bis du es korrigierst oder verwirfst.</p>
+<p id="outbox-status" class="muted" role="status" hidden></p>
+<p id="outbox-empty" hidden>Alles übertragen.</p>
+<noscript><p class="flash error">Ohne JavaScript gibt es keine Offline-Einträge.</p></noscript>
+<ul id="outbox" class="outbox-list"></ul>
+<template id="outbox-item">
+<li class="card outbox-item">
+<div><strong data-label></strong> <span class="muted" data-time></span></div>
+<p data-state></p>
+<div class="actions">
+<a class="button secondary" data-open hidden>Antwort ansehen</a>
+<button type="button" class="secondary" data-discard>Verwerfen</button>
+</div>
+</li>
+</template>
+{{end}}

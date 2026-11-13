@@ -34,6 +34,7 @@ import (
 	"github.com/tiliavir/allmend/internal/google"
 	"github.com/tiliavir/allmend/internal/links"
 	"github.com/tiliavir/allmend/internal/migrations"
+	"github.com/tiliavir/allmend/internal/offline"
 	"github.com/tiliavir/allmend/internal/pages"
 	"github.com/tiliavir/allmend/internal/password"
 	"github.com/tiliavir/allmend/internal/schiffe"
@@ -85,7 +86,7 @@ func newEnv(t *testing.T) *env {
 	static, _ := fs.Sub(ui.Static, "static")
 	e.idp = newFakeGoogle(t)
 	s := &webui.Server{
-		Accounts: e.accounts, Links: &links.Service{Repo: st.Links()}, Pages: &pages.Service{Repo: st.Pages()}, Commute: &commute.Service{Repo: st.Commute()}, Velo: &velo.Service{Repo: st.Velo(), Loc: time.UTC}, Schiffe: &schiffe.Service{Repo: st.Schiffe(), Accounts: st.Accounts()}, Ausgaben: &ausgaben.Service{Repo: st.Ausgaben(), Accounts: st.Accounts(), Loc: time.UTC}, Places: st.Places(), BaseCurrency: "EUR",
+		Accounts: e.accounts, Links: &links.Service{Repo: st.Links()}, Pages: &pages.Service{Repo: st.Pages()}, Commute: &commute.Service{Repo: st.Commute()}, Velo: &velo.Service{Repo: st.Velo(), Loc: time.UTC}, Schiffe: &schiffe.Service{Repo: st.Schiffe(), Accounts: st.Accounts()}, Ausgaben: &ausgaben.Service{Repo: st.Ausgaben(), Accounts: st.Accounts(), Loc: time.UTC}, Offline: &offline.Service{Repo: st.Offline()}, Places: st.Places(), BaseCurrency: "EUR",
 		Finanzen:  &finanzen.Service{Repo: st.Finanzen(), Market: st.Finanzen(), Base: "EUR"},
 		Sessions:  &session.Manager{Repo: st.Sessions()},
 		Templates: tpl, Static: static, Location: time.UTC,
@@ -423,39 +424,44 @@ func TestPagesRender(t *testing.T) {
 	ls, _ := e.st.Links().List(context.Background())
 	acc, _ := e.st.Accounts().ByEmail(context.Background(), "kim@example.org")
 	pages := map[string]pageCase{
-		"start-anonymous": {e.client(), "/", 200},
-		"start":           {admin, "/", 200},
-		"login":           {e.client(), "/anmelden", 200},
-		"konto":           {admin, "/konto", 200},
-		"admin":           {admin, "/verwaltung", 200},
-		"accounts":        {admin, "/verwaltung/konten", 200},
-		"account":         {admin, "/verwaltung/konten/" + acc.ID, 200},
-		"links":           {admin, "/verwaltung/links", 200},
-		"link":            {admin, "/verwaltung/links/" + ls[0].ID, 200},
-		"notfound":        {admin, "/nix", 404},
-		"seiten":          {admin, "/seiten", 200},
-		"velo":            {admin, "/velo", 200},
-		"schiffe":         {admin, "/schiffe", 200},
-		"orte":            {admin, "/orte", 200},
-		"orte-zeitachse":  {admin, "/orte/zeitachse", 200},
-		"velo-2025":       {admin, "/velo?jahr=2025", 200},
-		"velo-touren":     {admin, "/velo/touren?jahr=2025", 200},
-		"velo-tour-neu":   {admin, "/velo/touren/neu", 200},
-		"velo-velos":      {admin, "/velo/velos", 200},
-		"velo-velo-neu":   {admin, "/velo/velos/neu", 200},
-		"velo-kommentar":  {admin, "/velo/jahre/2025/kommentar", 200},
-		"velo-ziel":       {admin, "/velo/ziel/2025/5", 200},
-		"aw":              {admin, "/arbeitswege", 200},
-		"aw-neu":          {admin, "/arbeitswege/neu", 200},
-		"aw-edit":         {admin, "/arbeitswege/2026/bearbeiten", 200},
-		"seite-neu":       {admin, "/seiten/neu", 200},
-		"seite":           {admin, "/seiten/netzwerk", 200},
-		"seite-edit":      {admin, "/seiten/netzwerk/bearbeiten", 200},
-		"seite-rechte":    {admin, "/seiten/netzwerk/rechte", 200},
-		"seite-versionen": {admin, "/seiten/netzwerk/versionen", 200},
-		"seite-unter":     {admin, "/seiten/neu?unter=netzwerk", 200},
-		"seite-move":      {admin, "/seiten/netzwerk/verschieben", 200},
-		"seite-version":   {admin, "/seiten/netzwerk/versionen/1", 200},
+		"start-anonymous":          {e.client(), "/", 200},
+		"start":                    {admin, "/", 200},
+		"login":                    {e.client(), "/anmelden", 200},
+		"konto":                    {admin, "/konto", 200},
+		"admin":                    {admin, "/verwaltung", 200},
+		"accounts":                 {admin, "/verwaltung/konten", 200},
+		"account":                  {admin, "/verwaltung/konten/" + acc.ID, 200},
+		"links":                    {admin, "/verwaltung/links", 200},
+		"link":                     {admin, "/verwaltung/links/" + ls[0].ID, 200},
+		"notfound":                 {admin, "/nix", 404},
+		"seiten":                   {admin, "/seiten", 200},
+		"velo":                     {admin, "/velo", 200},
+		"schiffe":                  {admin, "/schiffe", 200},
+		"orte":                     {admin, "/orte", 200},
+		"orte-zeitachse":           {admin, "/orte/zeitachse", 200},
+		"velo-2025":                {admin, "/velo?jahr=2025", 200},
+		"velo-touren":              {admin, "/velo/touren?jahr=2025", 200},
+		"velo-tour-neu":            {admin, "/velo/touren/neu", 200},
+		"velo-velos":               {admin, "/velo/velos", 200},
+		"velo-velo-neu":            {admin, "/velo/velos/neu", 200},
+		"velo-kommentar":           {admin, "/velo/jahre/2025/kommentar", 200},
+		"velo-ziel":                {admin, "/velo/ziel/2025/5", 200},
+		"aw":                       {admin, "/arbeitswege", 200},
+		"aw-neu":                   {admin, "/arbeitswege/neu", 200},
+		"aw-edit":                  {admin, "/arbeitswege/2026/bearbeiten", 200},
+		"seite-neu":                {admin, "/seiten/neu", 200},
+		"seite":                    {admin, "/seiten/netzwerk", 200},
+		"seite-edit":               {admin, "/seiten/netzwerk/bearbeiten", 200},
+		"seite-rechte":             {admin, "/seiten/netzwerk/rechte", 200},
+		"seite-versionen":          {admin, "/seiten/netzwerk/versionen", 200},
+		"seite-unter":              {admin, "/seiten/neu?unter=netzwerk", 200},
+		"seite-move":               {admin, "/seiten/netzwerk/verschieben", 200},
+		"seite-version":            {admin, "/seiten/netzwerk/versionen/1", 200},
+		"offline":                  {admin, "/offline", 200},
+		"offline-gespeichert":      {admin, "/offline/gespeichert", 200},
+		"offline-nicht-moeglich":   {admin, "/offline/nicht-moeglich", 200},
+		"offline-nicht-verfuegbar": {admin, "/offline/nicht-verfuegbar", 200},
+		"offline-schiffe":          {admin, "/offline/schiffe", 200},
 	}
 	pages["velo-tour"] = pageCase{admin, "/velo/touren/" + tours[0].ID, 200}
 	pages["velo-velo"] = pageCase{admin, "/velo/velos/" + bikes[0].ID, 200}

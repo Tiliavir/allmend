@@ -147,6 +147,16 @@ input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; accent-
 .flash { padding: 12px 16px; border-radius: 12px; border: 1px solid var(--ok); background: color-mix(in srgb, var(--ok) 10%, var(--surface)); }
 .demo-banner { margin: 0; padding: 8px 16px; text-align: center; font-size: 14px; background: color-mix(in srgb, var(--ok) 14%, var(--surface)); border-bottom: 1px solid var(--border); }
 .flash.error { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
+.flash.offline { border-color: var(--border); background: color-mix(in srgb, var(--muted) 10%, var(--surface)); }
+.outbox-link {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 10px; font-size: 14px;
+  color: var(--text); text-decoration: none; border: 1px solid var(--border);
+}
+.outbox-link[hidden] { display: none; }
+.outbox-link.rejected { border-color: var(--danger); color: var(--danger); }
+.outbox-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.outbox-item.rejected { border-color: var(--danger); }
+.logout-warning { padding: 8px 12px; max-width: 260px; font-size: 14px; }
 .secret { font: 20px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 1px; user-select: all; }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }

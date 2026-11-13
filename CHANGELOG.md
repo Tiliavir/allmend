@@ -4,6 +4,22 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.7.0] - 2026-11-13
+
+### Added
+
+- Offline mode (#7): pages opened before stay readable while Allmend is
+  unreachable, with a banner „Offline – Stand vom …“. Adding an Ausgabe,
+  changing Arbeitswege and adding a Velo tour also work offline: the entries
+  wait in an outbox on the device and are transferred in order when the
+  server is back; the header shows how many are waiting. What the server
+  rejects (e.g. Arbeitswege changed elsewhere meanwhile) stays on the page
+  „Nicht übertragen“ to correct or discard. Schiffe versenken and every other
+  change need a connection and say so. Logout removes the offline copies and
+  the outbox (with a warning while entries wait). Schema step 13 adds the
+  table `offline_requests`.
+- Browser tests with Playwright (`npm ci && npx playwright test`).
+
 ## [0.6.0] - 2026-11-13
 
 ### Added
