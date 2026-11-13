@@ -11,11 +11,12 @@ ideas, not its code (CalDAV state sync is a different problem). (stated)
 
 ## Decision
 - **One service worker for the whole app** (`ui/static/sw.js`, native ES,
-  no dependency). Modules opt in; nothing changes for modules that don't.
-- **Reading offline:** GET pages of opted-in modules are fetched network
-  first; on failure the last cached copy is shown with a banner
-  „Offline – Stand vom …". Cache only same-origin HTML, CSS, JS and icons.
-- **Writing offline (outbox):** when a POST of an opted-in form fails because
+  no dependency). Which routes work offline is an explicit list (scope below).
+- **Reading offline:** GET pages are fetched network first; on failure
+  the last cached copy is shown with a banner
+  „Offline – Stand vom …". Cache only same-origin HTML, CSS, JS and icons, and only
+  pages the account has opened before (no prefetching).
+- **Writing offline (outbox):** when a POST of a form in the write scope fails because
   the network is down, the service worker stores the form data in an
   IndexedDB outbox and answers with a page „Offline gespeichert – wird
   übertragen". The form itself needs no JS.
@@ -36,11 +37,17 @@ ideas, not its code (CalDAV state sync is a different problem). (stated)
   not empty), so a shared device leaks no data.
 - **Schiffe versenken has no offline mode.** Without a connection it shows
   an error („Schiffe versenken braucht eine Verbindung"); no move is queued.
-- **Shopping list:** stays a page (ADR pages); how the family wants to use it
-  is open (#7). Until then, pages are readable offline, and editing pages offline
-  is decided together with that.
-- Which other modules opt in for reading or writing is decided per module
-  when it is built; this ADR only provides the mechanism.
+- **Scope (stated, 2026-11-13):**
+
+  | Offline | What |
+  | --- | --- |
+  | Read + write | Ausgaben: add an entry. Arbeitswege: change. Velo: add a tour. |
+  | Read only | Start page and navigation, and every other module and page (incl. the shopping list page, #7). |
+  | Nothing | Schiffe versenken (error, see above). |
+
+  Arbeitswege edits carry the year's version (optimistic locking), so a
+  stale offline change is rejected and shown, never overwrites. File fields
+  of a form (e.g. a GPX track) are stored as part of the outbox entry.
 
 ## Why
 - One mechanism instead of one per module or one app per module: accounts,
@@ -51,7 +58,8 @@ ideas, not its code (CalDAV state sync is a different problem). (stated)
 
 ## Consequences
 - New: one service worker, a small outbox page, an idempotency table
-  (migration step), and a list of opted-in routes.
+  (migration step), and a list of offline routes (read, write) kept next to
+  the routes in `Server.Handler`.
 - Offline entries are not shown in lists until they are transferred (no
   client rendering); the outbox page and a counter in the header show them.
 - The service worker must be versioned with the release so old caches are
