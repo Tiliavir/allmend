@@ -73,12 +73,12 @@ func strs(t *testing.T, d *sql.DB, q string) []string {
 // TestExpenseCategoriesMigration: old free-text categories are mapped to the
 // fixed keys; the database refuses unknown ones afterwards.
 func TestExpenseCategoriesMigration(t *testing.T) {
-	d, migrate := v12Setup(t, "Groceries", "Entertainment", "lebensmittel", "", "Medical expenses", " Wohnen ")
+	d, migrate := v12Setup(t, "Groceries", "Entertainment", "lebensmittel", "", "Medical expenses", " Wohnen ", "Life - Other")
 	if err := migrate(); err != nil {
 		t.Fatal(err)
 	}
 	got := strs(t, d, `SELECT category FROM expense_entries WHERE kind = 'ausgabe' ORDER BY id`)
-	want := []string{"groceries", "entertainment_other", "groceries", "general", "medical", "home_other"}
+	want := []string{"groceries", "entertainment_other", "groceries", "general", "medical", "home_other", "life_other"}
 	if !slices.Equal(got, want) {
 		t.Errorf("entries %v, want %v", got, want)
 	}

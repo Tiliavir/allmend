@@ -1,5 +1,7 @@
 package ausgaben
 
+import "strings"
+
 // Categories are a fixed list: subcategories under seven main categories,
 // the same set Splitwise uses. Only the subcategory key is stored; the main
 // category follows from it. Keys are English and never change (a new key
@@ -27,7 +29,7 @@ var Mains = []Main{
 		{"groceries", "food_drink", "Lebensmittel", "Groceries"},
 		{"dining_out", "food_drink", "Auswärts essen", "Dining out"},
 		{"liquor", "food_drink", "Alkohol", "Liquor"},
-		{"food_other", "food_drink", "Sonstiges", "Food and drink"},
+		{"food_other", "food_drink", "Sonstiges", "Food and drink - Other"},
 	}},
 	{Key: "home", Name: "Wohnen", Subs: []Sub{
 		{"rent", "home", "Miete", "Rent"},
@@ -38,7 +40,7 @@ var Mains = []Main{
 		{"maintenance", "home", "Unterhalt", "Maintenance"},
 		{"pets", "home", "Haustiere", "Pets"},
 		{"services", "home", "Dienstleistungen", "Services"},
-		{"home_other", "home", "Sonstiges", "Home"},
+		{"home_other", "home", "Sonstiges", "Home - Other"},
 	}},
 	{Key: "utilities", Name: "Nebenkosten", Subs: []Sub{
 		{"electricity", "utilities", "Strom", "Electricity"},
@@ -47,7 +49,7 @@ var Mains = []Main{
 		{"trash", "utilities", "Abfall", "Trash"},
 		{"cleaning", "utilities", "Reinigung", "Cleaning"},
 		{"tv_phone_internet", "utilities", "TV/Telefon/Internet", "TV/Phone/Internet"},
-		{"utilities_other", "utilities", "Sonstiges", "Utilities"},
+		{"utilities_other", "utilities", "Sonstiges", "Utilities - Other"},
 	}},
 	{Key: "transportation", Name: "Verkehr", Subs: []Sub{
 		{"car", "transportation", "Auto", "Car"},
@@ -58,14 +60,14 @@ var Mains = []Main{
 		{"taxi", "transportation", "Taxi", "Taxi"},
 		{"plane", "transportation", "Flug", "Plane"},
 		{"hotel", "transportation", "Hotel", "Hotel"},
-		{"transportation_other", "transportation", "Sonstiges", "Transportation"},
+		{"transportation_other", "transportation", "Sonstiges", "Transportation - Other"},
 	}},
 	{Key: "entertainment", Name: "Freizeit", Subs: []Sub{
 		{"movies", "entertainment", "Filme", "Movies"},
 		{"music", "entertainment", "Musik", "Music"},
 		{"games", "entertainment", "Spiele", "Games"},
 		{"sports", "entertainment", "Sport", "Sports"},
-		{"entertainment_other", "entertainment", "Sonstiges", "Entertainment"},
+		{"entertainment_other", "entertainment", "Sonstiges", "Entertainment - Other"},
 	}},
 	{Key: "life", Name: "Leben", Subs: []Sub{
 		{"clothing", "life", "Kleidung", "Clothing"},
@@ -75,7 +77,7 @@ var Mains = []Main{
 		{"childcare", "life", "Kinderbetreuung", "Childcare"},
 		{"education", "life", "Bildung", "Education"},
 		{"taxes", "life", "Steuern", "Taxes"},
-		{"life_other", "life", "Sonstiges", "Life"},
+		{"life_other", "life", "Sonstiges", "Life - Other"},
 	}},
 	{Key: "general", Name: "Allgemein", Subs: []Sub{
 		{"general", "general", "Allgemein", "General"},
@@ -103,8 +105,13 @@ func init() {
 		}
 	}
 	// Splitwise files an expense without a category as "General"; older
-	// exports call the main category "Uncategorized".
+	// exports call the main category "Uncategorized". A bare main category
+	// name means its "Other".
 	subsBySplitwise["Uncategorized"] = subsByKey["general"]
+	for _, k := range []string{"food_other", "home_other", "utilities_other", "transportation_other", "entertainment_other", "life_other"} {
+		sub := subsByKey[k]
+		subsBySplitwise[strings.TrimSuffix(sub.Splitwise, " - Other")] = sub
+	}
 }
 
 // Category returns the subcategory with key k.

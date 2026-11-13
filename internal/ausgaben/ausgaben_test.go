@@ -277,6 +277,12 @@ func TestCategories(t *testing.T) {
 	if _, ok := Category("Essen"); ok {
 		t.Error("free text accepted as category")
 	}
+	if s, _ := FromSplitwise("Home"); s.Key != "home_other" {
+		t.Errorf("Home -> %q", s.Key)
+	}
+	if s, _ := FromSplitwise("Life - Other"); s.Key != "life_other" {
+		t.Errorf("Life - Other -> %q", s.Key)
+	}
 	if s, _ := FromSplitwise("Uncategorized"); s.Key != "general" {
 		t.Errorf("Uncategorized -> %q", s.Key)
 	}

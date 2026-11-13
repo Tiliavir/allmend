@@ -172,6 +172,9 @@ var v12Map = map[string]string{
 	"Clothing": "clothing", "Gifts": "gifts", "Medical expenses": "medical", "Insurance": "insurance",
 	"Childcare": "childcare", "Education": "education", "Taxes": "taxes", "Life": "life_other",
 	"General": "general", "Uncategorized": "general",
+	// Splitwise exports "Other" with its main category.
+	"Food and drink - Other": "food_other", "Home - Other": "home_other", "Utilities - Other": "utilities_other",
+	"Transportation - Other": "transportation_other", "Entertainment - Other": "entertainment_other", "Life - Other": "life_other",
 	// German names as shown in the app (main categories map to their "Sonstiges").
 	"Lebensmittel": "groceries", "Auswärts essen": "dining_out", "Alkohol": "liquor", "Essen & Trinken": "food_other",
 	"Miete": "rent", "Hypothek": "mortgage", "Möbel": "furniture", "Elektronik": "electronics",
