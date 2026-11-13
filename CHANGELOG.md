@@ -4,6 +4,13 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [Unreleased]
+
+### Added
+
+- Web app manifest and app icons: Allmend installs as a standalone app on
+  Android without the address bar.
+
 ## [0.7.0] - 2026-11-13
 
 ### Added

@@ -235,6 +235,9 @@ func staticFiles(fsys fs.FS) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
+		if strings.HasSuffix(p, ".webmanifest") { // not in Go's built-in MIME table
+			w.Header().Set("Content-Type", "application/manifest+json")
+		}
 		if strings.HasPrefix(p, "vendor/") {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else {

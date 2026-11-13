@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="/static/allmend.css">
 {{with .DarkMedia}}<link rel="stylesheet" href="/static/dark.css" media="{{.}}">
 {{end}}<link rel="icon" href="/static/allmend.svg" type="image/svg+xml">
+<link rel="manifest" href="/static/allmend.webmanifest">
 {{if eq .Module "orte"}}<link rel="stylesheet" href="/static/vendor/leaflet-1.9.4.css">
 {{end}}{{if .Demo}}<script src="/static/demo.js" type="module"></script>
 {{else if .Account}}<script src="/static/offline.js" type="module"></script>
