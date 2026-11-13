@@ -22,6 +22,7 @@ import (
 	"github.com/tiliavir/allmend/internal/finanzen"
 	"github.com/tiliavir/allmend/internal/google"
 	"github.com/tiliavir/allmend/internal/links"
+	"github.com/tiliavir/allmend/internal/offline"
 	"github.com/tiliavir/allmend/internal/pages"
 	"github.com/tiliavir/allmend/internal/places"
 	"github.com/tiliavir/allmend/internal/schiffe"
@@ -42,6 +43,7 @@ type Server struct {
 	FinRefresh func() bool
 	Schiffe    *schiffe.Service
 	Ausgaben   *ausgaben.Service
+	Offline    *offline.Service
 	Places     places.Repository
 	Sessions   *session.Manager
 	Google     *google.Provider // nil: Google login disabled
@@ -54,6 +56,7 @@ type Server struct {
 	Demo bool
 
 	hub hub
+	sw  swCache
 }
 
 type ctxKey struct{}
@@ -65,6 +68,13 @@ func currentAccount(r *http.Request) *account.Account {
 
 // Handler returns the full HTTP handler.
 func (s *Server) Handler() http.Handler {
+	mux := s.routes()
+	csrf := http.NewCrossOriginProtection()
+	return logRequests(securityHeaders(csrf.Handler(s.loadAccount(s.replay(mux)))))
+}
+
+// routes registers every route.
+func (s *Server) routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", staticFiles(s.Static)))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
@@ -103,11 +113,10 @@ func (s *Server) Handler() http.Handler {
 	s.orteRoutes(mux)
 	s.finanzenRoutes(mux)
 	s.ausgabenRoutes(mux)
+	s.offlineRoutes(mux)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { s.status(w, r, http.StatusNotFound) })
-
-	csrf := http.NewCrossOriginProtection()
-	return logRequests(securityHeaders(csrf.Handler(s.loadAccount(mux))))
+	return mux
 }
 
 // loadAccount puts the session's account into the request context.

@@ -21,6 +21,7 @@ var forbidden = map[string][]string{
 	"internal/schiffe":    {"internal/store", "internal/webui", "database/sql", "net/http"},
 	"internal/ausgaben":   {"internal/store", "internal/webui", "database/sql", "net/http"},
 	"internal/places":     {"internal/store", "internal/webui", "database/sql", "net/http"},
+	"internal/offline":    {"internal/store", "internal/webui", "database/sql", "net/http"},
 	"internal/finanzen":   {"internal/store", "internal/webui", "internal/quotes", "database/sql", "net/http"},
 	"internal/quotes":     {"internal/store", "internal/webui", "database/sql"},
 	"internal/session":    {"internal/store", "internal/webui", "database/sql"},
