@@ -1002,3 +1002,48 @@ func TestOrte(t *testing.T) {
 		t.Errorf("unknown person: %d", r.StatusCode)
 	}
 }
+
+// TestManifest: the web app manifest makes Allmend installable as a
+// standalone app (Android shows no address bar inside its scope).
+func TestManifest(t *testing.T) {
+	e := newEnv(t)
+	_, page := e.get(e.client(), "/anmelden")
+	if !strings.Contains(page, `<link rel="manifest" href="/static/allmend.webmanifest">`) {
+		t.Fatal("layout links no manifest")
+	}
+	r, body := e.get(e.client(), "/static/allmend.webmanifest")
+	if r.StatusCode != 200 || r.Header.Get("Content-Type") != "application/manifest+json" {
+		t.Fatalf("manifest: %d %q", r.StatusCode, r.Header.Get("Content-Type"))
+	}
+	var m struct {
+		StartURL string `json:"start_url"`
+		Scope    string `json:"scope"`
+		Display  string `json:"display"`
+		Icons    []struct{ Src, Sizes, Type, Purpose string }
+	}
+	if err := json.Unmarshal([]byte(body), &m); err != nil {
+		t.Fatal(err)
+	}
+	base, _ := url.Parse(e.srv.URL + "/static/allmend.webmanifest")
+	start, _ := base.Parse(m.StartURL)
+	scope, _ := base.Parse(m.Scope)
+	if start.Path != "/" || scope.Path != "/" || m.Display != "standalone" {
+		t.Errorf("start %q scope %q display %q", start.Path, scope.Path, m.Display)
+	}
+	need := map[string]bool{"192x192 any": false, "512x512 any": false, "192x192 maskable": false, "512x512 maskable": false}
+	for _, ic := range m.Icons {
+		u, _ := base.Parse(ic.Src)
+		r, _ := e.get(e.client(), u.Path)
+		if r.StatusCode != 200 || r.Header.Get("Content-Type") != ic.Type {
+			t.Errorf("icon %s: %d %q", ic.Src, r.StatusCode, r.Header.Get("Content-Type"))
+		}
+		if _, ok := need[ic.Sizes+" "+ic.Purpose]; ok {
+			need[ic.Sizes+" "+ic.Purpose] = true
+		}
+	}
+	for k, ok := range need {
+		if !ok {
+			t.Errorf("no icon %s", k)
+		}
+	}
+}
