@@ -44,3 +44,19 @@
 {{end}}</div>
 <p class="muted small">Bei „gleich“ bekommen Rundungsrappen zuerst die, die nicht bezahlt haben. Feste Beträge müssen den Betrag ergeben.</p>
 </fieldset>{{end}}
+{{define "agrow"}}<tr{{if eq .Kind "zahlung"}} class="payment"{{end}}><td>{{dateDE .Date}}</td>
+<td><a href="/ausgaben/{{.GroupID}}/eintraege/{{.ID}}">{{if .Description}}{{.Description}}{{else}}Zahlung{{end}}</a>{{if .Category}} {{template "agcat" .Category}}{{end}}{{if .RecurringID}} <span class="badge">monatlich</span>{{end}}</td>
+<td>{{if .Unsplit}}–{{else}}{{.Payer}}{{end}}</td>
+<td>{{if eq .Kind "zahlung"}}→ {{.Receiver}}{{else if .Unsplit}}<span class="muted">nicht geteilt</span>{{else}}{{.For}}{{end}}</td>
+<td class="num">{{money .Amount .Currency}}</td>
+<td class="num {{gaincls .Mine}}">{{if .Mine}}{{money .Mine .Currency}}{{else}}–{{end}}</td></tr>
+{{end}}
+{{define "agcat"}}{{$c := agcat .}}<span class="ag-badge ag-c-{{$c.Main}}">{{agicon $c.Key}}{{$c.Name}}</span>{{end}}
+{{define "agpick"}}{{$cur := agcat .}}<fieldset class="ag-pick"><legend>Kategorie</legend>
+<details class="ag-picker"{{if not $cur.Main}} open{{end}}>
+<summary>{{if $cur.Main}}<span class="ag-card ag-cur ag-c-{{$cur.Main}}">{{agicon $cur.Key}}<span>{{$cur.Short}}</span></span><span class="ag-cur-txt"><b>{{$cur.MainName}}</b><span class="muted small">Kategorie ändern</span></span>{{else}}<span class="ag-cur-txt"><b>Kategorie wählen</b></span>{{end}}<svg class="ag-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+<div class="ag-search" hidden><label>Suchen<input type="search" placeholder="z. B. Strom, Velo, Miete" autocomplete="off"></label></div>
+<div class="ag-panel">{{range agmains}}<div class="ag-group"><h2><span class="ag-dot ag-c-{{.Key}}"></span>{{.Name}}</h2>
+<div class="ag-opts ag-c-{{.Key}}">{{$main := .Name}}{{range .Subs}}<label class="ag-card ag-opt" data-search="{{.Name}} {{$main}}"><input type="radio" name="category" value="{{.Key}}" required{{if eq .Key $cur.Key}} checked{{end}}>{{agicon .Key}}<span>{{.Name}}</span>{{icon "check"}}</label>{{end}}</div></div>
+{{end}}<p class="muted ag-none" hidden>Nichts gefunden.</p></div>
+</details></fieldset>{{end}}

@@ -1,0 +1,29 @@
+{{define "content"}}
+{{$d := .Data}}{{$g := $d.Group}}
+<div class="page-title"><h1>{{.Title}}</h1><a class="button secondary" href="/ausgaben/{{$g.ID}}">Zur Gruppe</a></div>
+<p class="muted small"><a href="/ausgaben/{{$g.ID}}">{{$g.Name}}</a></p>
+{{if $d.Currencies}}<div class="ag-filters">
+<nav class="ag-seg" aria-label="Jahr">{{range $d.Years}}<a href="{{.Href}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</nav>
+<nav class="ag-seg" aria-label="Sicht">{{range $d.Views}}<a href="{{.Href}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</nav>
+{{if gt (len $d.Currencies) 1}}<nav class="ag-seg" aria-label="Währung">{{range $d.Currencies}}<a href="{{.Href}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</nav>{{end}}
+</div>
+<section class="card" aria-labelledby="verteilung">
+<h2 id="verteilung">{{if eq $d.View "ich"}}Mein Anteil{{else}}Ausgaben der Gruppe{{end}} · {{$d.YearLabel}} · {{$d.Currency}}</h2>
+{{if $d.Slices}}<div class="ag-donut-wrap">
+<div class="ag-donut"><svg viewBox="0 0 42 42" role="img" aria-label="Ausgaben nach Bereich">
+<circle class="ag-ring" cx="21" cy="21" r="15.91549" fill="none" stroke-width="6"/>
+{{range $d.Slices}}<circle class="ag-seg-arc ag-c-{{.Main.Key}}" cx="21" cy="21" r="15.91549" fill="none" stroke-width="6" stroke-dasharray="{{.Dash}}" stroke-dashoffset="{{.Offset}}"><title>{{.Main.Name}}: {{money .Amount $d.Currency}}</title></circle>
+{{end}}</svg>
+<div class="ag-hole"><span class="muted small">Total</span><b>{{money $d.Total $d.Currency}}</b><span class="muted small">{{$d.YearLabel}}</span></div></div>
+<ul class="ag-legend">{{range $d.Slices}}<li><a href="{{.Href}}"{{if .Chosen}} aria-current="true"{{end}}><span class="ag-dot ag-c-{{.Main.Key}}"></span><span>{{.Main.Name}}</span><span class="num">{{money .Amount $d.Currency}}</span><span class="num muted">{{pct0 .Share}}</span></a></li>
+{{end}}</ul>
+</div>{{else}}<p class="muted">Keine Ausgaben in {{$d.YearLabel}}.</p>{{end}}
+</section>
+{{with $d.Chosen}}<section class="card" aria-labelledby="aufteilung">
+<h2 id="aufteilung">{{.Main.Name}} · {{$d.YearLabel}}</h2>
+<ul class="ag-subs">{{range $d.Subs}}<li><span class="ag-badge ag-c-{{.Cat.Main}}">{{agicon .Cat.Key}}{{.Cat.Short}}</span><svg class="ag-bar" viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true"><rect class="ag-c-{{.Cat.Main}}" width="{{.Width}}" height="4"/></svg><span class="num">{{money .Amount $d.Currency}}</span></li>
+{{end}}</ul>
+</section>{{end}}
+<p class="muted small">Zahlungen zählen nicht mit. „Nicht geteilt“ zählt in der Gruppensicht voll, in „Mein Anteil“ nicht. Währungen werden nicht umgerechnet.</p>
+{{else}}<p class="muted">Noch keine Ausgaben.</p>{{end}}
+{{end}}

@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 var grp = Group{ID: "g", Members: []string{"anna", "ben", "mia"}}
@@ -104,7 +105,7 @@ func TestRecurringDates(t *testing.T) {
 }
 
 func TestCheckEntry(t *testing.T) {
-	ok := Entry{GroupID: "g", Kind: Expense, Date: "2026-01-02", Description: "Markt", Amount: 1000, Currency: "EUR", PaidBy: "anna", Shares: []Share{{"anna", 500}, {"ben", 500}}}
+	ok := Entry{GroupID: "g", Kind: Expense, Date: "2026-01-02", Description: "Markt", Category: "groceries", Amount: 1000, Currency: "EUR", PaidBy: "anna", Shares: []Share{{"anna", 500}, {"ben", 500}}}
 	if err := CheckEntry(grp, ok); err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +113,7 @@ func TestCheckEntry(t *testing.T) {
 	if err := CheckEntry(grp, pay); err != nil {
 		t.Fatal(err)
 	}
-	unsplit := Entry{GroupID: "g", Kind: Expense, Date: "2026-01-02", Description: "Abo", Category: "Musik", Amount: 499, Currency: "EUR"}
+	unsplit := Entry{GroupID: "g", Kind: Expense, Date: "2026-01-02", Description: "Abo", Category: "music", Amount: 499, Currency: "EUR"}
 	if err := CheckEntry(grp, unsplit); err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +134,9 @@ func TestCheckEntry(t *testing.T) {
 		"long":       func(e *Entry) { e.Description = strings.Repeat("x", MaxDescLen+1) },
 		"self pay":   func(e *Entry) { e.Kind, e.Description, e.Shares = Payment, "", []Share{{"anna", 1000}} },
 		"pay two":    func(e *Entry) { e.Kind, e.Description = Payment, "" },
-		"pay cat":    func(e *Entry) { e.Kind, e.Category, e.Shares = Payment, "Essen", []Share{{"ben", 1000}} },
+		"pay cat":    func(e *Entry) { e.Kind, e.Category, e.Shares = Payment, "groceries", []Share{{"ben", 1000}} },
+		"no cat":     func(e *Entry) { e.Category = "" },
+		"free cat":   func(e *Entry) { e.Category = "Essen" },
 		"unsplit sh": func(e *Entry) { e.PaidBy = "" },
 	}
 	for name, mod := range bad {
@@ -148,7 +151,7 @@ func TestCheckEntry(t *testing.T) {
 }
 
 func TestCheckRecurring(t *testing.T) {
-	r := Recurring{GroupID: "g", Description: "Miete", Amount: 120000, Currency: "CHF", PaidBy: "anna", Shares: Equal(grp, 120000, "anna", []string{"anna", "ben"}), Day: 31, Next: "2026-02-28"}
+	r := Recurring{GroupID: "g", Description: "Miete", Category: "rent", Amount: 120000, Currency: "CHF", PaidBy: "anna", Shares: Equal(grp, 120000, "anna", []string{"anna", "ben"}), Day: 31, Next: "2026-02-28"}
 	if err := CheckRecurring(grp, r); err != nil {
 		t.Fatal(err)
 	}
@@ -159,6 +162,10 @@ func TestCheckRecurring(t *testing.T) {
 	r.Next, r.Day = "2026-02-28", 0
 	if CheckRecurring(grp, r) == nil {
 		t.Error("day 0 accepted")
+	}
+	r.Day, r.Category = 28, "Wohnen"
+	if CheckRecurring(grp, r) == nil {
+		t.Error("free-text category accepted")
 	}
 }
 
@@ -203,6 +210,9 @@ func TestParseSplitwise(t *testing.T) {
 	if a := es[3]; a.PaidBy != "" || a.Shares != nil || a.Kind != Expense {
 		t.Errorf("not shared: %+v", a)
 	}
+	if cats := []string{es[0].Category, es[1].Category, es[2].Category, es[3].Category, es[5].Category}; !slices.Equal(cats, []string{"groceries", "electricity", "sports", "music", "entertainment_other"}) {
+		t.Errorf("categories %v", cats)
+	}
 	if p := es[4]; p.Kind != Payment || p.PaidBy != "ben" || p.Receiver() != "anna" || p.Category != "" {
 		t.Errorf("payment: %+v", p)
 	}
@@ -233,6 +243,7 @@ func TestParseSplitwiseRejects(t *testing.T) {
 		"after total":  {swFile + "2025-02-02,Brot,Groceries,3.00,EUR,1.50,-1.50,0.00\n", swNames, "nach dem Saldo"},
 		"fields":       {strings.Replace(swFile, "-10.00,-10.00\n", "-10.00\n", 1), swNames, "Felder"},
 		"no category":  {strings.Replace(swFile, "Strom,Electricity", "Strom,", 1), swNames, "Kategorie"},
+		"unknown cat":  {strings.Replace(swFile, "Strom,Electricity", "Strom,Energie", 1), swNames, "Kategorie „Energie“ unbekannt"},
 	}
 	for name, c := range cases {
 		_, err := ParseSplitwise(strings.NewReader(c.file), grp, c.names)
@@ -244,5 +255,97 @@ func TestParseSplitwiseRejects(t *testing.T) {
 		if !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %q does not mention %q", name, err, c.want)
 		}
+	}
+}
+
+func TestCategories(t *testing.T) {
+	n := 0
+	for _, m := range Mains {
+		for _, s := range m.Subs {
+			n++
+			if got, ok := MainOf(s.Key); !ok || got.Key != m.Key {
+				t.Errorf("%s: main %v", s.Key, got.Key)
+			}
+			if got, ok := FromSplitwise(s.Splitwise); !ok || got.Key != s.Key {
+				t.Errorf("%s: splitwise %q", s.Key, s.Splitwise)
+			}
+		}
+	}
+	if n != 43 {
+		t.Errorf("%d subcategories, want 43", n)
+	}
+	if _, ok := Category("Essen"); ok {
+		t.Error("free text accepted as category")
+	}
+	if s, _ := FromSplitwise("Home"); s.Key != "home_other" {
+		t.Errorf("Home -> %q", s.Key)
+	}
+	if s, _ := FromSplitwise("Life - Other"); s.Key != "life_other" {
+		t.Errorf("Life - Other -> %q", s.Key)
+	}
+	if s, _ := FromSplitwise("Uncategorized"); s.Key != "general" {
+		t.Errorf("Uncategorized -> %q", s.Key)
+	}
+}
+
+func TestSplitSettled(t *testing.T) {
+	two := Group{ID: "g", Members: []string{"anna", "ben"}}
+	at := func(m int) time.Time { return time.Date(2026, 1, 1, 0, m, 0, 0, time.UTC) }
+	exp := func(id, date, cur, payer string, amt int64, m int) Entry {
+		e := Entry{ID: id, Date: date, Currency: cur, Kind: Expense, Amount: amt, CreatedAt: at(m)}
+		if payer != "" {
+			e.PaidBy, e.Shares = payer, Equal(two, amt, payer, two.Members)
+		}
+		return e
+	}
+	pay := func(id, date, cur, from, to string, amt int64, m int) Entry {
+		return Entry{ID: id, Date: date, Currency: cur, Kind: Payment, Amount: amt, PaidBy: from, Shares: []Share{{to, amt}}, CreatedAt: at(m)}
+	}
+	es := []Entry{ // newest first, as the repository returns them
+		exp("e5", "2026-03-01", "EUR", "anna", 1000, 9),
+		exp("c2", "2026-02-20", "CHF", "ben", 800, 8),
+		pay("p1", "2026-02-10", "EUR", "ben", "anna", 600, 7),
+		exp("u1", "2026-02-05", "EUR", "", 999, 6), // unsplit: no effect
+		exp("e2", "2026-02-01", "EUR", "anna", 400, 5),
+		exp("e1", "2026-01-15", "EUR", "anna", 800, 4),
+	}
+	open, st := SplitSettled(es)
+	ids := func(es []Entry) (out []string) {
+		for _, e := range es {
+			out = append(out, e.ID)
+		}
+		return out
+	}
+	if got := ids(open); !slices.Equal(got, []string{"e5", "c2"}) {
+		t.Errorf("open %v", got)
+	}
+	if len(st) != 1 || st[0] != (Settled{"EUR", "2026-02-10", 4}) {
+		t.Errorf("settled %+v", st)
+	}
+	// A back-dated expense before the payment reopens everything in EUR.
+	es = append(es, exp("b1", "2026-01-20", "EUR", "ben", 200, 10))
+	open, st = SplitSettled(es)
+	if len(open) != 7 || len(st) != 0 {
+		t.Errorf("after back-dated entry: %v %+v", ids(open), st)
+	}
+}
+
+func TestSpending(t *testing.T) {
+	es := []Entry{
+		{Kind: Expense, Date: "2026-01-02", Currency: "EUR", Category: "groceries", Amount: 1000, PaidBy: "anna", Shares: []Share{{"anna", 600}, {"ben", 400}}},
+		{Kind: Expense, Date: "2026-02-02", Currency: "EUR", Category: "groceries", Amount: 500, PaidBy: "ben", Shares: []Share{{"ben", 500}}},
+		{Kind: Expense, Date: "2025-12-31", Currency: "EUR", Category: "rent", Amount: 9000, PaidBy: "anna", Shares: []Share{{"anna", 4500}, {"ben", 4500}}},
+		{Kind: Expense, Date: "2026-03-01", Currency: "EUR", Category: "music", Amount: 499}, // unsplit
+		{Kind: Expense, Date: "2026-03-01", Currency: "CHF", Category: "groceries", Amount: 700, PaidBy: "anna", Shares: []Share{{"anna", 700}}},
+		{Kind: Payment, Date: "2026-03-02", Currency: "EUR", Amount: 100, PaidBy: "ben", Shares: []Share{{"anna", 100}}},
+	}
+	if got := Spending(es, "EUR", "2026", ""); len(got) != 2 || got["groceries"] != 1500 || got["music"] != 499 {
+		t.Errorf("group 2026: %v", got)
+	}
+	if got := Spending(es, "EUR", "", "anna"); len(got) != 2 || got["groceries"] != 600 || got["rent"] != 4500 {
+		t.Errorf("anna all years: %v", got)
+	}
+	if got := Spending(es, "CHF", "2025", ""); len(got) != 0 {
+		t.Errorf("CHF 2025: %v", got)
 	}
 }

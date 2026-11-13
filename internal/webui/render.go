@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/tiliavir/allmend/internal/account"
+	"github.com/tiliavir/allmend/internal/ausgaben"
 	"github.com/tiliavir/allmend/internal/finanzen"
 	"github.com/tiliavir/allmend/internal/links"
 	"github.com/tiliavir/allmend/internal/velo"
@@ -157,6 +158,9 @@ var funcs = template.FuncMap{
 		return "−" + velo.FmtInt(int(math.Round(-f)))
 	},
 	"icon":      icon,
+	"agicon":    agIcon,
+	"agcat":     agCatOf,
+	"agmains":   func() []ausgaben.Main { return ausgaben.Mains },
 	"linkIcons": func() []string { return links.Icons },
 	"iconLabel": func(s string) string { return iconLabels[s] },
 	"gaincls": func(c int64) string {
@@ -171,6 +175,7 @@ var funcs = template.FuncMap{
 	"qty": func(f float64) string {
 		return strings.ReplaceAll(strconv.FormatFloat(f, 'f', -1, 64), ".", ",")
 	},
+	"pct0": func(f float64) string { return strconv.Itoa(int(f*100+0.5)) + " %" },
 	"pct1": func(f float64) string {
 		return strings.ReplaceAll(strconv.FormatFloat(f*100, 'f', 1, 64), ".", ",") + " %"
 	},

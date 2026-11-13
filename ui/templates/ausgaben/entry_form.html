@@ -19,8 +19,7 @@
 <label>Notiz<input type="text" name="description" maxlength="120" value="{{$e.Description}}"></label>
 {{else}}
 <label>Beschreibung<input type="text" name="description" maxlength="120" required value="{{$e.Description}}"></label>
-<label>Kategorie<input type="text" name="category" maxlength="60" list="ag-categories" value="{{$e.Category}}"></label>
-<datalist id="ag-categories">{{range $d.Categories}}<option value="{{.}}"></option>{{end}}</datalist>
+{{template "agpick" $e.Category}}
 {{if and $e.ID (not $e.PaidBy)}}<p class="muted small">Importiert ohne Aufteilung: Splitwise hat nicht exportiert, wer bezahlt hat. Beim Speichern wird sie so aufgeteilt, wie unten angegeben.</p>{{end}}
 <label>Bezahlt von<select name="paid_by">{{if not $e.PaidBy}}<option value="">–</option>{{end}}{{range $d.People}}<option value="{{.ID}}"{{if eq .ID $e.PaidBy}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
 {{template "agsplit" $d}}

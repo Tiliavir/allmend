@@ -28,7 +28,7 @@ const (
 type Group struct {
 	ID        string
 	Name      string
-	Members   []string // account ids in display order; fixed after creation
+	Members   []string // account ids in display order; members are added, never removed
 	CreatedBy string
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -50,7 +50,7 @@ type Entry struct {
 	Kind        Kind
 	Date        string // YYYY-MM-DD
 	Description string
-	Category    string // free text; empty for payments
+	Category    string // subcategory key (see Mains); empty for payments
 	Amount      int64
 	Currency    string // ISO 4217
 	// PaidBy is the member who paid. Empty only for imported expenses that
@@ -91,7 +91,7 @@ type Recurring struct {
 	ID          string
 	GroupID     string
 	Description string
-	Category    string
+	Category    string // subcategory key
 	Amount      int64
 	Currency    string
 	PaidBy      string
@@ -116,7 +116,6 @@ const (
 	MaxAmount     = 100_000_000_00 // 100 million in major units
 	MaxNameLen    = 60
 	MaxDescLen    = 120
-	MaxCatLen     = 60
 	MinMembers    = 2
 	MaxMembers    = 20
 	maxCatchUpMon = 24 // a recurring expense books at most this many months at once
@@ -179,9 +178,13 @@ func checkShares(p *Problems, g Group, amount int64, shares []Share) {
 	p.add(sum != amount, "Die Anteile ergeben nicht den Betrag")
 }
 
-func checkCommon(p *Problems, desc, cat string, amount int64, currency string) {
+func checkCategory(p *Problems, cat string) {
+	_, ok := Category(cat)
+	p.add(!ok, "Kategorie wählen")
+}
+
+func checkCommon(p *Problems, desc string, amount int64, currency string) {
 	p.add(runes(desc) > MaxDescLen || desc != strings.TrimSpace(desc), "Beschreibung zu lang")
-	p.add(runes(cat) > MaxCatLen || cat != strings.TrimSpace(cat), "Kategorie zu lang")
 	p.add(amount <= 0 || amount > MaxAmount, "Betrag muss grösser als 0 sein")
 	p.add(!ValidCurrency(currency), "Währung ungültig (drei Grossbuchstaben, z. B. EUR)")
 }
@@ -191,10 +194,11 @@ func CheckEntry(g Group, e Entry) error {
 	var p Problems
 	p.add(e.GroupID != g.ID, "Falsche Gruppe")
 	p.add(!ValidDate(e.Date), "Datum fehlt oder ist ungültig")
-	checkCommon(&p, e.Description, e.Category, e.Amount, e.Currency)
+	checkCommon(&p, e.Description, e.Amount, e.Currency)
 	switch e.Kind {
 	case Expense:
 		p.add(e.Description == "", "Beschreibung fehlt")
+		checkCategory(&p, e.Category)
 		if e.PaidBy == "" {
 			p.add(len(e.Shares) != 0, "Ohne Zahlende keine Anteile")
 			break
@@ -218,7 +222,8 @@ func CheckRecurring(g Group, r Recurring) error {
 	var p Problems
 	p.add(r.GroupID != g.ID, "Falsche Gruppe")
 	p.add(r.Description == "", "Beschreibung fehlt")
-	checkCommon(&p, r.Description, r.Category, r.Amount, r.Currency)
+	checkCommon(&p, r.Description, r.Amount, r.Currency)
+	checkCategory(&p, r.Category)
 	p.add(!g.IsMember(r.PaidBy), "Bezahlt hat niemand aus der Gruppe")
 	p.add(len(r.Shares) == 0, "Für wen? Mindestens eine Person wählen")
 	checkShares(&p, g, r.Amount, r.Shares)

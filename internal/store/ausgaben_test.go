@@ -50,7 +50,7 @@ func TestAusgabenGroupsAndEntries(t *testing.T) {
 	if len(g.Members) != 2 || g.Members[0] != "anna" {
 		t.Fatalf("members %v", g.Members)
 	}
-	e, err := svc.SaveEntry(ctx, ben, ausgaben.Entry{GroupID: g.ID, Kind: ausgaben.Expense, Date: "2026-03-01", Description: "Markt", Category: "Essen",
+	e, err := svc.SaveEntry(ctx, ben, ausgaben.Entry{GroupID: g.ID, Kind: ausgaben.Expense, Date: "2026-03-01", Description: "Markt", Category: "groceries",
 		Amount: 1839, Currency: "EUR", PaidBy: "ben", Shares: ausgaben.Equal(g, 1839, "ben", g.Members)})
 	if err != nil {
 		t.Fatal(err)
@@ -133,7 +133,7 @@ func TestAusgabenRecurringBooking(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := ausgaben.Recurring{GroupID: g.ID, Description: "Strom", Category: "Energie", Amount: 9000, Currency: "EUR", PaidBy: "anna",
+	r := ausgaben.Recurring{GroupID: g.ID, Description: "Strom", Category: "electricity", Amount: 9000, Currency: "EUR", PaidBy: "anna",
 		Shares: ausgaben.Equal(g, 9000, "anna", g.Members), Day: 31, Next: "2026-01-31"}
 	if r, err = svc.SaveRecurring(ctx, anna, r); err != nil {
 		t.Fatal(err)
@@ -172,5 +172,44 @@ func TestAusgabenRecurringBooking(t *testing.T) {
 	var inv *ausgaben.InvalidError
 	if _, err := svc.SaveRecurring(ctx, anna, r); !errors.As(err, &inv) {
 		t.Errorf("old start: %v", err)
+	}
+}
+
+func TestAusgabenEditGroup(t *testing.T) {
+	_, svc, acc := ausgabenSetup(t)
+	ctx := context.Background()
+	anna, ben, kim := acc["anna"], acc["ben"], acc["kim"]
+	g, err := svc.CreateGroup(ctx, anna, "Haushalt", []string{"ben"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SaveEntry(ctx, anna, ausgaben.Entry{GroupID: g.ID, Kind: ausgaben.Expense, Date: "2026-03-01", Description: "Markt", Category: "groceries",
+		Amount: 1000, Currency: "EUR", PaidBy: "anna", Shares: ausgaben.Equal(g, 1000, "anna", g.Members)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.EditGroup(ctx, kim, g.ID, "Fremd", nil); !errors.Is(err, ausgaben.ErrNotFound) {
+		t.Errorf("non-member edits: %v", err)
+	}
+	var inv *ausgaben.InvalidError
+	for name, add := range map[string][]string{"existing": {"ben"}, "no access": {"zoe"}, "twice": {"kim", "kim"}, "unknown": {"nobody"}} {
+		if _, err := svc.EditGroup(ctx, ben, g.ID, "Haushalt", add); !errors.As(err, &inv) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if _, err := svc.EditGroup(ctx, ben, g.ID, " ", nil); !errors.As(err, &inv) {
+		t.Errorf("empty name: %v", err)
+	}
+	if _, err := svc.EditGroup(ctx, ben, g.ID, "Daheim", []string{"kim"}); err != nil {
+		t.Fatal(err)
+	}
+	v, err := svc.Open(ctx, kim, g.ID)
+	if err != nil {
+		t.Fatalf("new member cannot open: %v", err)
+	}
+	if v.Group.Name != "Daheim" || strings.Join(v.Group.Members, ",") != "anna,ben,kim" || len(v.Entries) != 1 {
+		t.Fatalf("after edit: %+v, %d entries", v.Group, len(v.Entries))
+	}
+	if n := v.Balances[0].Nets; len(n) != 3 || n[2].Amount != 0 || n[0].Amount != 500 {
+		t.Errorf("balances %v", n)
 	}
 }

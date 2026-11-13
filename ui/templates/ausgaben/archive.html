@@ -1,0 +1,14 @@
+{{define "content"}}
+{{$d := .Data}}{{$g := $d.Group}}
+<div class="page-title"><h1>{{.Title}}</h1><a class="button secondary" href="/ausgaben/{{$g.ID}}">Zur Gruppe</a></div>
+<p class="muted small"><a href="/ausgaben/{{$g.ID}}">{{$g.Name}}</a> · Einträge bis zum letzten Ausgleich ihrer Währung. Sie zählen weiter für Saldo und Statistik.</p>
+{{if $d.Currencies}}<form class="filters" method="get" action="/ausgaben/{{$g.ID}}/archiv">
+<label>Währung<select name="waehrung"><option value=""{{if eq "" $d.Currency}} selected{{end}}>Alle</option>{{range $d.Currencies}}<option value="{{.}}"{{if eq . $d.Currency}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+<label>Jahr<select name="jahr"><option value=""{{if eq "" $d.Year}} selected{{end}}>Alle</option>{{range $d.Years}}<option value="{{.}}"{{if eq . $d.Year}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+<button class="button secondary" type="submit">Anzeigen</button>
+</form>
+<div class="card table-wrap"><table class="entries">
+<thead><tr><th scope="col">Datum</th><th scope="col">Beschreibung</th><th scope="col">Bezahlt</th><th scope="col">Für</th><th scope="col" class="num">Betrag</th><th scope="col" class="num">Für dich</th></tr></thead>
+<tbody>{{range $d.Rows}}{{template "agrow" .}}{{else}}<tr><td colspan="6" class="muted">Keine Einträge.</td></tr>{{end}}</tbody></table></div>
+{{else}}<p class="muted">Noch nichts ausgeglichen.</p>{{end}}
+{{end}}
