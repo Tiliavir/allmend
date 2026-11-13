@@ -9,6 +9,7 @@
 {{end}}<link rel="icon" href="/static/allmend.svg" type="image/svg+xml">
 {{if eq .Module "orte"}}<link rel="stylesheet" href="/static/vendor/leaflet-1.9.4.css">
 {{end}}{{if .Demo}}<script src="/static/demo.js" type="module"></script>
+{{else if .Account}}<script src="/static/offline.js" type="module"></script>
 {{end}}{{range .Scripts}}<script src="{{.Src}}"{{if .Module}} type="module"{{else}} defer{{end}}></script>
 {{end}}
 </head>
@@ -18,7 +19,7 @@
 {{if .Account}}<nav class="nav" aria-label="Module">
 {{range .Nav}}<a href="{{.Path}}"{{if .Current}} aria-current="page"{{end}}>{{.Name}}</a>
 {{end}}</nav>
-<div class="user"><details>
+<div class="user">{{if not .Demo}}<a class="outbox-link" href="/offline" hidden data-outbox></a>{{end}}<details>
 <summary><span class="avatar" aria-hidden="true">{{.Initial}}</span><span class="name">{{.Account.DisplayName}}</span></summary>
 <div class="menu">
 <a href="/konto">Konto</a>
