@@ -3,3 +3,7 @@
 *.md
 /data/
 /allmend
+node_modules/
+tests/
+test-results/
+.cache/

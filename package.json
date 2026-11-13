@@ -1,0 +1,9 @@
+{
+  "name": "allmend-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {},
+  "devDependencies": {
+    "@playwright/test": "1.65.0"
+  }
+}
