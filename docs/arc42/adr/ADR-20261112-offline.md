@@ -46,8 +46,7 @@ ideas, not its code (CalDAV state sync is a different problem). (stated)
   | Nothing | Schiffe versenken (error, see above). |
 
   Arbeitswege edits carry the year's version (optimistic locking), so a
-  stale offline change is rejected and shown, never overwrites. File fields
-  of a form (e.g. a GPX track) are stored as part of the outbox entry.
+  stale offline change is rejected and shown, never overwrites.
 
 ## Why
 - One mechanism instead of one per module or one app per module: accounts,

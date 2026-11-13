@@ -22,6 +22,11 @@ decisions: `docs/arc42/09-architecture-decisions.md`. Open points: `OPEN.md`.
   Unexpected errors go to `s.fail` (logged, generic page), never swallowed.
 - **Few dependencies.** Runtime: `modernc.org/sqlite`, `golang.org/x/crypto`,
   later `goldmark`. A new one needs an ADR.
+- **Offline** (ADR offline): the forms that work offline are listed in
+  `offlineWrites` (`internal/webui/offline.go`) and nowhere else; they must
+  stay POST/redirect/GET and reject stale versions. A page that shows a
+  one-time message is `no-store`. Change `ui/static/sw.js` only together
+  with `tests/e2e`.
 - Money as `int64` minor units; timestamps stored UTC (RFC 3339), shown in
   `Europe/Zurich`.
 
@@ -35,7 +40,8 @@ internal/db          open, migrate (backup, one transaction), counts
 internal/migrations  the ordered list of schema steps
 internal/webui       routing, middleware, handlers
 internal/demo        made-up data and static export for the public demo
-ui/templates, ui/static
+ui/templates, ui/static  (ui/static/sw.js: service worker, served as /sw.js)
+tests/e2e            Playwright browser tests against the real binary
 ```
 
 Layer rules are enforced by `internal/archtest`.
@@ -47,6 +53,7 @@ make check      # lint + test + W3C validation (as CI)
 make run        # local server on :8080 (needs ALLMEND_ADMIN_PASSWORD_HASH)
 make demo       # static demo site in .cache/demo
 go run ./cmd/allmend migrate --dry-run
+npm ci && npx playwright test   # browser tests (installed Chrome)
 ```
 
 ## Adding a module

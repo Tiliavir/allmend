@@ -22,3 +22,4 @@
 | [Schiffe versenken: Seeminen and drag-and-drop setup](adr/ADR-20261111-sea-mines.md) | Proposed |
 | [Deleting accounts, colour scheme per account](adr/ADR-20261111-account-deletion-and-theme.md) | Proposed |
 | [Offline with a service worker and an outbox](adr/ADR-20261112-offline.md) | Accepted |
+| [End-to-end tests with Playwright](adr/ADR-20261113-playwright-e2e.md) | Accepted |
