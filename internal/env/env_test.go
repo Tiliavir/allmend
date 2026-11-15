@@ -10,8 +10,12 @@ func TestLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.AdminEmail != "me@example.org" || c.Addr != ":8080" || !c.SecureCookie {
+	if c.AdminEmail != "me@example.org" || c.Addr != ":8080" || !c.SecureCookie || c.AppName != "Allmend" {
 		t.Fatalf("%+v", c)
+	}
+	c, err = Load([]string{"ALLMEND_ADMIN_EMAIL=a@b.c", "ALLMEND_ADMIN_PASSWORD_HASH=x", "ALLMEND_APP_NAME=Familie Müller"})
+	if err != nil || c.AppName != "Familie Müller" {
+		t.Fatalf("%q %v", c.AppName, err)
 	}
 }
 
@@ -24,6 +28,9 @@ func TestLoadErrors(t *testing.T) {
 		"google no tls":  {"ALLMEND_ADMIN_EMAIL=a@b.c", "ALLMEND_GOOGLE_CLIENT_ID=x", "ALLMEND_GOOGLE_CLIENT_SECRET=y", "ALLMEND_BASE_URL=http://nas.example"},
 		"base with path": {"ALLMEND_ADMIN_EMAIL=a@b.c", "ALLMEND_ADMIN_PASSWORD_HASH=x", "ALLMEND_BASE_URL=https://x.example/app"},
 		"bad bool":       {"ALLMEND_ADMIN_EMAIL=a@b.c", "ALLMEND_ADMIN_PASSWORD_HASH=x", "ALLMEND_SECURE_COOKIE=nope"},
+		"name blanks":    {"ALLMEND_ADMIN_EMAIL=a@b.c", "ALLMEND_ADMIN_PASSWORD_HASH=x", "ALLMEND_APP_NAME= Hof"},
+		"name too long":  {"ALLMEND_ADMIN_EMAIL=a@b.c", "ALLMEND_ADMIN_PASSWORD_HASH=x", "ALLMEND_APP_NAME=" + strings.Repeat("x", 31)},
+		"name control":   {"ALLMEND_ADMIN_EMAIL=a@b.c", "ALLMEND_ADMIN_PASSWORD_HASH=x", "ALLMEND_APP_NAME=Ho\tf"},
 	}
 	for name, envs := range cases {
 		if _, err := Load(envs); err == nil {

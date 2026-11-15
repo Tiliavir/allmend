@@ -57,6 +57,7 @@ type env struct {
 	st       *store.Store
 	accounts *account.Service
 	idp      *fakeGoogle
+	web      *webui.Server
 }
 
 const adminEmail = "admin@example.org"
@@ -92,6 +93,7 @@ func newEnv(t *testing.T) *env {
 		Sessions:  &session.Manager{Repo: st.Sessions()},
 		Templates: tpl, Static: static, Location: time.UTC,
 	}
+	e.web = s
 	e.srv = httptest.NewServer(nil)
 	s.Google = e.idp.provider(e.srv.URL + "/anmelden/google/zurueck")
 	e.srv.Config.Handler = s.Handler()
@@ -965,10 +967,12 @@ func TestManifest(t *testing.T) {
 		t.Fatalf("manifest: %d %q", r.StatusCode, r.Header.Get("Content-Type"))
 	}
 	var m struct {
-		StartURL string `json:"start_url"`
-		Scope    string `json:"scope"`
-		Display  string `json:"display"`
-		Icons    []struct{ Src, Sizes, Type, Purpose string }
+		Name      string
+		ShortName string `json:"short_name"`
+		StartURL  string `json:"start_url"`
+		Scope     string `json:"scope"`
+		Display   string `json:"display"`
+		Icons     []struct{ Src, Sizes, Type, Purpose string }
 	}
 	if err := json.Unmarshal([]byte(body), &m); err != nil {
 		t.Fatal(err)
@@ -976,6 +980,9 @@ func TestManifest(t *testing.T) {
 	base, _ := url.Parse(e.srv.URL + "/static/allmend.webmanifest")
 	start, _ := base.Parse(m.StartURL)
 	scope, _ := base.Parse(m.Scope)
+	if m.Name != "Allmend" || m.ShortName != "Allmend" {
+		t.Errorf("name %q short %q", m.Name, m.ShortName)
+	}
 	if start.Path != "/" || scope.Path != "/" || m.Display != "standalone" {
 		t.Errorf("start %q scope %q display %q", start.Path, scope.Path, m.Display)
 	}
@@ -994,5 +1001,29 @@ func TestManifest(t *testing.T) {
 		if !ok {
 			t.Errorf("no icon %s", k)
 		}
+	}
+}
+
+// TestAppName: ALLMEND_APP_NAME renames the page title, the header and the
+// installed app; nothing else changes.
+func TestAppName(t *testing.T) {
+	e := newEnv(t)
+	e.web.AppName = "Hof & Garten"
+	_, page := e.get(e.client(), "/anmelden")
+	if !strings.Contains(page, "<title>Anmelden · Hof &amp; Garten</title>") || !strings.Contains(page, "Hof &amp; Garten</a>") {
+		t.Fatalf("page does not show the name:\n%s", page)
+	}
+	r, body := e.get(e.client(), "/static/allmend.webmanifest")
+	var m struct {
+		Name      string
+		ShortName string `json:"short_name"`
+		Lang      string
+		Icons     []any
+	}
+	if err := json.Unmarshal([]byte(body), &m); err != nil || r.Header.Get("Content-Type") != "application/manifest+json" {
+		t.Fatalf("%v %q", err, r.Header.Get("Content-Type"))
+	}
+	if m.Name != "Hof & Garten" || m.ShortName != "Hof & Garten" || m.Lang != "de" || len(m.Icons) != 5 {
+		t.Errorf("%+v", m)
 	}
 }

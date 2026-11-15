@@ -30,7 +30,8 @@ type Page struct {
 	Error   string
 	Scripts []Script
 	Data    any
-	Demo    bool // static demo export: banner, forms handled by demo.js
+	Demo    bool   // static demo export: banner, forms handled by demo.js
+	App     string // displayed app name (ALLMEND_APP_NAME)
 }
 
 // Script is a page-specific script (always same-origin, deferred).
@@ -251,6 +252,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, name
 		p.Nav = nav(*p.Account, r.URL.Path)
 	}
 	p.Demo = s.Demo
+	p.App = s.appName()
 	if f := takeFlash(w, r); f != "" && p.Flash == "" {
 		p.Flash = f
 	}
@@ -289,7 +291,7 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusInternalServerError)
 	if t, ok := s.Templates["error"]; ok {
-		_ = t.ExecuteTemplate(w, "layout", Page{Title: "Fehler", Data: errorData{"Etwas ist schiefgelaufen", "Der Fehler wurde protokolliert. Deine Daten sind unverändert."}})
+		_ = t.ExecuteTemplate(w, "layout", Page{Title: "Fehler", App: s.appName(), Data: errorData{"Etwas ist schiefgelaufen", "Der Fehler wurde protokolliert. Deine Daten sind unverändert."}})
 	}
 }
 

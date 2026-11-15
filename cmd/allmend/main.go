@@ -161,6 +161,7 @@ func serve() error {
 		refresher.Quotes = &quotes.AlphaVantage{Key: cfg.AlphaVantageKey}
 	}
 	srv.FinRefresh = func() bool { return refresher.Start(ctx) }
+	srv.AppName = cfg.AppName
 	if cfg.GoogleEnabled() {
 		srv.Google = google.New(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.BaseURL.String()+"/anmelden/google/zurueck")
 	}
