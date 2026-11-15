@@ -13,13 +13,43 @@ import (
 
 // Timeline is what ParseTimeline takes from a Timeline.json.
 type Timeline struct {
-	Points   []Point
-	Stays    []Stay
-	First    time.Time // earliest time in the file (zero if it has none)
+	Points []Point
+	Stays  []Stay
+	First  time.Time // earliest time in the file (zero if it has none)
+}
+
+// ParseTimeline reads a whole Timeline.json into memory (see ReadTimeline).
+func ParseTimeline(r io.Reader) (Timeline, error) {
+	var t Timeline
+	first, err := ReadTimeline(r,
+		func(p Point) error { t.Points = append(t.Points, p); return nil },
+		func(s Stay) error { t.Stays = append(t.Stays, s); return nil })
+	t.First = first
+	return t, err
+}
+
+// timelineReader hands each entry to its callbacks as it is read.
+type timelineReader struct {
+	onPoint  func(Point) error
+	onStay   func(Stay) error
+	first    time.Time
 	segments int
 }
 
-// ParseTimeline reads the Timeline.json that Google Maps exports on the
+// sinkError is an error of a callback: passed on as is, not as bad input.
+type sinkError struct{ err error }
+
+func (e sinkError) Error() string { return e.err.Error() }
+func (e sinkError) Unwrap() error { return e.err }
+
+// IsInputError reports whether an error of ReadTimeline is about the file
+// (and not of a callback).
+func IsInputError(err error) bool {
+	var se sinkError
+	return err != nil && !errors.As(err, &se)
+}
+
+// ReadTimeline reads the Timeline.json that Google Maps exports on the
 // phone. Two shapes exist: an object {"semanticSegments":[…], "rawSignals":
 // […], …} with "47.5°, 7.5°" coordinates, and a bare array of segments with
 // "geo:47.5,7.5" coordinates (newer exports, iOS). It takes the
@@ -27,53 +57,57 @@ type Timeline struct {
 // activities and timeline memories are skipped, as are rawSignals and
 // userLocationProfile. The file is read as a stream. A segment of unknown
 // kind, a missing field or a bad value aborts with the segment's number.
-func ParseTimeline(r io.Reader) (Timeline, error) {
-	var t Timeline
+// Every entry goes to onPoint or onStay as soon as it is read; an error of
+// a callback stops reading and is returned (see IsInputError). first is the
+// earliest time in the file.
+func ReadTimeline(r io.Reader, onPoint func(Point) error, onStay func(Stay) error) (first time.Time, err error) {
+	t := &timelineReader{onPoint: onPoint, onStay: onStay}
+	defer func() { first = t.first }()
 	dec := json.NewDecoder(r)
 	tok, err := dec.Token()
 	if err != nil {
-		return t, errors.New("Datei ist kein JSON (Timeline.json erwartet)")
+		return time.Time{}, errors.New("Datei ist kein JSON (Timeline.json erwartet)")
 	}
 	switch tok {
 	case json.Delim('['):
 		if err := t.readSegments(dec); err != nil {
-			return t, err
+			return time.Time{}, err
 		}
-		return t, t.nonEmpty()
+		return time.Time{}, t.nonEmpty()
 	case json.Delim('{'):
 	default:
-		return t, errors.New("Datei ist weder JSON-Objekt noch -Liste (Timeline.json erwartet)")
+		return time.Time{}, errors.New("Datei ist weder JSON-Objekt noch -Liste (Timeline.json erwartet)")
 	}
 	var keys []string
 	seen := false
 	for dec.More() {
 		tok, err := dec.Token()
 		if err != nil {
-			return t, fmt.Errorf("Datei ist kein gültiges JSON: %w", err)
+			return time.Time{}, fmt.Errorf("Datei ist kein gültiges JSON: %w", err)
 		}
 		key, _ := tok.(string)
 		if key != "semanticSegments" {
 			keys = append(keys, key)
 			if err := skipValue(dec); err != nil {
-				return t, fmt.Errorf("Datei ist kein gültiges JSON: %w", err)
+				return time.Time{}, fmt.Errorf("Datei ist kein gültiges JSON: %w", err)
 			}
 			continue
 		}
 		seen = true
 		if tok, err := dec.Token(); err != nil || tok != json.Delim('[') {
-			return t, errors.New(`"semanticSegments" ist keine Liste`)
+			return time.Time{}, errors.New(`"semanticSegments" ist keine Liste`)
 		}
 		if err := t.readSegments(dec); err != nil {
-			return t, err
+			return time.Time{}, err
 		}
 	}
 	if !seen {
-		return t, fmt.Errorf(`Datei enthält kein Feld "semanticSegments", sondern %q – ist es eine Timeline.json vom Handy?`, keys)
+		return time.Time{}, fmt.Errorf(`Datei enthält kein Feld "semanticSegments", sondern %q – ist es eine Timeline.json vom Handy?`, keys)
 	}
-	return t, t.nonEmpty()
+	return time.Time{}, t.nonEmpty()
 }
 
-func (t *Timeline) nonEmpty() error {
+func (t *timelineReader) nonEmpty() error {
 	if t.segments == 0 {
 		return errors.New("Datei enthält keine Einträge")
 	}
@@ -81,7 +115,7 @@ func (t *Timeline) nonEmpty() error {
 }
 
 // readSegments reads a list of segments up to and including its closing "]".
-func (t *Timeline) readSegments(dec *json.Decoder) error {
+func (t *timelineReader) readSegments(dec *json.Decoder) error {
 	for i := 1; dec.More(); i++ {
 		t.segments++
 		var s rawSegment
@@ -89,6 +123,10 @@ func (t *Timeline) readSegments(dec *json.Decoder) error {
 			return fmt.Errorf("Abschnitt %d: kein gültiges JSON: %w", i, err)
 		}
 		if err := s.add(t); err != nil {
+			var se sinkError
+			if errors.As(err, &se) {
+				return se
+			}
 			return fmt.Errorf("Abschnitt %d: %w", i, err)
 		}
 	}
@@ -137,7 +175,7 @@ type rawSegment struct {
 	TimelineMemory json.RawMessage `json:"timelineMemory"`
 }
 
-func (s rawSegment) add(t *Timeline) error {
+func (s rawSegment) add(t *timelineReader) error {
 	kinds := 0
 	for _, has := range []bool{s.TimelinePath != nil, s.Visit != nil, s.Activity != nil, s.TimelineMemory != nil} {
 		if has {
@@ -158,7 +196,7 @@ func (s rawSegment) add(t *Timeline) error {
 	if end.Before(start) {
 		return errors.New("endTime liegt vor startTime")
 	}
-	t.first(start)
+	t.seen(start)
 	switch {
 	case s.TimelinePath != nil:
 		for j, p := range *s.TimelinePath {
@@ -171,8 +209,10 @@ func (s rawSegment) add(t *Timeline) error {
 				return fmt.Errorf("Punkt %d: %w", j+1, err)
 			}
 			off := offsetMin(at)
-			t.first(at)
-			t.Points = append(t.Points, Point{At: at.UTC(), Offset: &off, Day: localDay(at), Latitude: lat, Longitude: lon})
+			t.seen(at)
+			if err := t.onPoint(Point{At: at.UTC(), Offset: &off, Day: localDay(at), Latitude: lat, Longitude: lon}); err != nil {
+				return sinkError{err}
+			}
 		}
 	case s.Visit != nil:
 		v := s.Visit
@@ -198,8 +238,10 @@ func (s rawSegment) add(t *Timeline) error {
 		if err != nil {
 			return err
 		}
-		t.Stays = append(t.Stays, Stay{Start: start.UTC(), End: end.UTC(), Offset: offsetMin(start), Day: localDay(start), EndDay: localDay(end.In(start.Location())),
-			Latitude: lat, Longitude: lon, SemanticType: kind})
+		if err := t.onStay(Stay{Start: start.UTC(), End: end.UTC(), Offset: offsetMin(start), Day: localDay(start), EndDay: localDay(end.In(start.Location())),
+			Latitude: lat, Longitude: lon, SemanticType: kind}); err != nil {
+			return sinkError{err}
+		}
 	}
 	return nil
 }
@@ -252,9 +294,9 @@ func semanticType(s string) string {
 	return strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(s), " ", "_"))
 }
 
-func (t *Timeline) first(at time.Time) {
-	if t.First.IsZero() || at.Before(t.First) {
-		t.First = at.UTC()
+func (t *timelineReader) seen(at time.Time) {
+	if t.first.IsZero() || at.Before(t.first) {
+		t.first = at.UTC()
 	}
 }
 

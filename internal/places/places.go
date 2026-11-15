@@ -78,6 +78,12 @@ type Import struct {
 	Skipped     int
 }
 
+// ImportSink takes the rows of one import inside its transaction.
+type ImportSink interface {
+	Point(Point) error
+	Stay(Stay) error
+}
+
 // Cell is one heatmap cell: its centre and the number of points in it.
 type Cell struct {
 	Latitude, Longitude float64
@@ -108,8 +114,10 @@ type Repository interface {
 	// Mark is the newest time in the owner's location history (points and
 	// stay starts); ok is false if there is none.
 	Mark(ctx context.Context, owner string) (mark time.Time, ok bool, err error)
-	// InsertImport stores an import with its points and stays in one transaction.
-	InsertImport(ctx context.Context, imp Import, pts []Point, stays []Stay) error
+	// InsertImport stores an import in one transaction: fill hands the
+	// points and stays to the sink as they come and returns the import with
+	// its final counts. An error of fill rolls everything back.
+	InsertImport(ctx context.Context, imp Import, fill func(ImportSink) (Import, error)) error
 	Imports(ctx context.Context, owner string) ([]Import, error) // newest first
 	DeleteImport(ctx context.Context, owner, id string) error    // with its points and stays
 

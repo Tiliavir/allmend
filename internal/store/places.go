@@ -216,38 +216,61 @@ func (r *Places) Mark(ctx context.Context, owner string) (time.Time, bool, error
 	return t, true, nil
 }
 
-// InsertImport stores an import with its points and stays in one transaction.
-func (r *Places) InsertImport(ctx context.Context, imp places.Import, pts []places.Point, stays []places.Stay) error {
+// InsertImport stores an import in one transaction; fill writes the rows
+// through the sink while it reads them, then the import gets its counts.
+func (r *Places) InsertImport(ctx context.Context, imp places.Import, fill func(places.ImportSink) (places.Import, error)) error {
 	tx, err := r.s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO place_imports (id, owner_id, kind, file_name, imported_at, points, stays, skipped) VALUES (?,?,?,?,?,?,?,?)`,
-		imp.ID, imp.OwnerID, imp.Kind, imp.FileName, fmtTime(imp.At), imp.Points, imp.Stays, imp.Skipped); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO place_imports (id, owner_id, kind, file_name, imported_at, points, stays, skipped) VALUES (?,?,?,?,?,0,0,0)`,
+		imp.ID, imp.OwnerID, imp.Kind, imp.FileName, fmtTime(imp.At)); err != nil {
 		return fmt.Errorf("store.Places.InsertImport: %w", err)
 	}
-	ps, err := tx.PrepareContext(ctx, `INSERT INTO place_points (owner_id, import_id, at, utc_offset_min, day, latitude, longitude) VALUES (?,?,?,?,?,?,?)`)
+	sink := &importSink{owner: imp.OwnerID, imp: imp.ID}
+	if sink.pts, err = tx.PrepareContext(ctx, `INSERT INTO place_points (owner_id, import_id, at, utc_offset_min, day, latitude, longitude) VALUES (?,?,?,?,?,?,?)`); err != nil {
+		return err
+	}
+	defer func() { _ = sink.pts.Close() }()
+	if sink.stays, err = tx.PrepareContext(ctx, `INSERT INTO place_stays (owner_id, import_id, start_at, end_at, utc_offset_min, day, end_day, latitude, longitude, semantic_type)
+VALUES (?,?,?,?,?,?,?,?,?,?)`); err != nil {
+		return err
+	}
+	defer func() { _ = sink.stays.Close() }()
+	sink.ctx = ctx
+	done, err := fill(sink)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = ps.Close() }()
-	for _, p := range pts {
-		var off any
-		if p.Offset != nil {
-			off = *p.Offset
-		}
-		if _, err := ps.ExecContext(ctx, imp.OwnerID, imp.ID, fmtPoint(p.At), off, p.Day, p.Latitude, p.Longitude); err != nil {
-			return fmt.Errorf("store.Places.InsertImport point: %w", err)
-		}
-	}
-	for _, s := range stays {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO place_stays (owner_id, import_id, start_at, end_at, utc_offset_min, day, end_day, latitude, longitude, semantic_type)
-VALUES (?,?,?,?,?,?,?,?,?,?)`, imp.OwnerID, imp.ID, fmtPoint(s.Start), fmtPoint(s.End), s.Offset, s.Day, s.EndDay, s.Latitude, s.Longitude, s.SemanticType); err != nil {
-			return fmt.Errorf("store.Places.InsertImport stay: %w", err)
-		}
+	if _, err := tx.ExecContext(ctx, `UPDATE place_imports SET points = ?, stays = ?, skipped = ? WHERE id = ?`, done.Points, done.Stays, done.Skipped, imp.ID); err != nil {
+		return fmt.Errorf("store.Places.InsertImport counts: %w", err)
 	}
 	return tx.Commit()
+}
+
+type importSink struct {
+	ctx        context.Context
+	owner, imp string
+	pts, stays *sql.Stmt
+}
+
+func (s *importSink) Point(p places.Point) error {
+	var off any
+	if p.Offset != nil {
+		off = *p.Offset
+	}
+	if _, err := s.pts.ExecContext(s.ctx, s.owner, s.imp, fmtPoint(p.At), off, p.Day, p.Latitude, p.Longitude); err != nil {
+		return fmt.Errorf("store.Places.InsertImport point: %w", err)
+	}
+	return nil
+}
+
+func (s *importSink) Stay(st places.Stay) error {
+	if _, err := s.stays.ExecContext(s.ctx, s.owner, s.imp, fmtPoint(st.Start), fmtPoint(st.End), st.Offset, st.Day, st.EndDay, st.Latitude, st.Longitude, st.SemanticType); err != nil {
+		return fmt.Errorf("store.Places.InsertImport stay: %w", err)
+	}
+	return nil
 }
 
 // Imports lists an owner's imports, newest first.

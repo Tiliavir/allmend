@@ -14,6 +14,9 @@ versions: [Semantic Versioning](https://semver.org/). Releasing is described in
   without `semanticSegments` now names the fields it has instead.
 - The import help describes the export in the phone's settings
   (Standort › Standortdienste › Zeitachse › Zeitachsendaten exportieren).
+- Timeline.json import needs far less memory: entries are written while the
+  file is read, still in one transaction (a bad entry stores nothing). A
+  60 MB file peaks at about 60 MB instead of 230 MB.
 
 ## [0.9.0] - 2026-11-15
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"math"
 	"path"
@@ -105,51 +106,74 @@ type ImportResult struct {
 	Mark, First time.Time
 }
 
+// errNothingNew rolls back an import that added nothing.
+var errNothingNew = errors.New("places: nothing new")
+
 // ImportTimeline appends the new part of a Timeline.json to a's location
 // history: only entries after the newest stored time; older ones are
-// skipped and counted. Nothing new → nothing is stored (Import.ID "").
+// skipped and counted. The file is read as a stream and written while it is
+// read, all in one transaction: a bad entry anywhere stores nothing.
+// Nothing new → nothing is stored (Import.ID "").
 func (s *Service) ImportTimeline(ctx context.Context, a account.Account, fileName string, r io.Reader) (ImportResult, error) {
-	t, err := ParseTimeline(r)
-	if err != nil {
-		return ImportResult{}, &InvalidError{Problems{"Import abgebrochen, nichts gespeichert: " + err.Error()}}
-	}
 	mark, has, err := s.Repo.Mark(ctx, a.ID)
 	if err != nil {
 		return ImportResult{}, err
 	}
-	res := ImportResult{Mark: mark, First: t.First}
+	res := ImportResult{Mark: mark}
 	imp := Import{ID: id.New(), OwnerID: a.ID, Kind: "timeline", FileName: path.Base(strings.ReplaceAll(fileName, `\`, "/")), At: s.now()}
 	if imp.FileName == "" || imp.FileName == "." || imp.FileName == "/" {
 		imp.FileName = "Timeline.json"
 	}
-	var pts []Point
-	seen := make(map[Point]bool)
-	for _, p := range t.Points {
-		key := Point{At: p.At, Latitude: p.Latitude, Longitude: p.Longitude}
-		switch {
-		case has && !p.At.After(mark), seen[key]:
-			imp.Skipped++
-		default:
-			seen[key] = true
-			pts = append(pts, p)
+	var parseErr error
+	err = s.Repo.InsertImport(ctx, imp, func(sink ImportSink) (Import, error) {
+		// Points repeated within the file (overlapping segments) count once.
+		type key struct {
+			ms       int64
+			lat, lon float64
 		}
-	}
-	var stays []Stay
-	for _, st := range t.Stays {
-		if has && !st.Start.After(mark) {
-			imp.Skipped++
-			continue
+		seen := make(map[key]struct{})
+		first, err := ReadTimeline(r, func(p Point) error {
+			k := key{p.At.UnixMilli(), p.Latitude, p.Longitude}
+			if _, dup := seen[k]; dup || (has && !p.At.After(mark)) {
+				imp.Skipped++
+				return nil
+			}
+			seen[k] = struct{}{}
+			imp.Points++
+			return sink.Point(p)
+		}, func(st Stay) error {
+			if has && !st.Start.After(mark) {
+				imp.Skipped++
+				return nil
+			}
+			imp.Stays++
+			return sink.Stay(st)
+		})
+		res.First = first
+		if IsInputError(err) {
+			parseErr = err
 		}
-		stays = append(stays, st)
+		if err != nil {
+			return imp, err
+		}
+		if imp.Points == 0 && imp.Stays == 0 {
+			return imp, errNothingNew
+		}
+		return imp, nil
+	})
+	if parseErr != nil {
+		return ImportResult{}, &InvalidError{Problems{"Import abgebrochen, nichts gespeichert: " + parseErr.Error()}}
 	}
-	imp.Points, imp.Stays = len(pts), len(stays)
-	res.Gap = has && !t.First.IsZero() && t.First.After(mark)
-	if len(pts) == 0 && len(stays) == 0 {
+	res.Gap = has && !res.First.IsZero() && res.First.After(mark)
+	if errors.Is(err, errNothingNew) {
 		res.Import = Import{Skipped: imp.Skipped}
 		return res, nil
 	}
+	if err != nil {
+		return ImportResult{}, err
+	}
 	res.Import = imp
-	return res, s.Repo.InsertImport(ctx, imp, pts, stays)
+	return res, nil
 }
 
 // ── heatmap ───────────────────────────────────────────
