@@ -10,7 +10,7 @@ versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 
 - `allmend backup [-keep N]`: writes a consistent, integrity-checked copy of
   the database to `backup/allmend-<time>-manual.db` while the server runs,
-  e.g. `docker compose exec allmend /app/allmend backup -keep 14` from a
+  e.g. `docker compose exec -T allmend /app/allmend backup -keep 14` from a
   scheduled task. `-keep` deletes only older manual backups, never the
   pre-migration ones.
 

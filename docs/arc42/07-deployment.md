@@ -38,11 +38,12 @@ Unknown `ALLMEND_*` variables stop the start.
 the pre-migration backups are never deleted.
 
 ```sh
-docker compose exec allmend /app/allmend backup -keep 14
+docker compose exec -T allmend /app/allmend backup -keep 14
 ```
 
 On the NAS: DSM task scheduler, daily, shortly before the Hyper Backup run,
 so Hyper Backup picks up a consistent file instead of the live WAL database.
+`-T` because the scheduler has no terminal.
 
 ## Upgrade
 
