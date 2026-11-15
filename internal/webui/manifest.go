@@ -27,7 +27,7 @@ func (s *Server) manifest(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/manifest+json")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	_, _ = w.Write(b) //nolint:gosec // our own embedded asset plus the configured name
+	_, _ = w.Write(b)
 }
 
 func (s *Server) manifestJSON() ([]byte, error) {
