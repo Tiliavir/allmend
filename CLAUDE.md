@@ -33,7 +33,7 @@ decisions: `docs/arc42/09-architecture-decisions.md`. Open points: `OPEN.md`.
 ## Layout
 
 ```
-cmd/allmend          wiring, subcommands (serve, migrate, hashpw, health, demo)
+cmd/allmend          wiring, subcommands (serve, migrate, backup, hashpw, health, demo)
 internal/<module>    domain types, services, repository interfaces
 internal/store       SQLite repositories (only cmd + tests import it)
 internal/db          open, migrate (backup, one transaction), counts

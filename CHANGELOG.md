@@ -4,6 +4,16 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.8.0] - 2026-11-15
+
+### Added
+
+- `allmend backup [-keep N]`: writes a consistent, integrity-checked copy of
+  the database to `backup/allmend-<time>-manual.db` while the server runs,
+  e.g. `docker compose exec -T allmend /app/allmend backup -keep 14` from a
+  scheduled task. `-keep` deletes only older manual backups, never the
+  pre-migration ones.
+
 ## [0.7.1] - 2026-11-13
 
 ### Added

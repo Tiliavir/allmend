@@ -71,6 +71,16 @@ func run(args []string) error {
 			return err
 		}
 		return migrate(*dry)
+	case "backup":
+		fl := flag.NewFlagSet("backup", flag.ContinueOnError)
+		keep := fl.Int("keep", 0, "afterwards delete the oldest manual backups so that this many remain (0 = keep all)")
+		if err := fl.Parse(args); err != nil {
+			return err
+		}
+		if fl.NArg() != 0 {
+			return errors.New("usage: allmend backup [-keep N]")
+		}
+		return backup(*keep)
 	case "hashpw":
 		return hashpw()
 	case "health":

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 )
 
@@ -24,4 +25,47 @@ func Backup(ctx context.Context, d *sql.DB, dir, label string) (string, error) {
 		return "", fmt.Errorf("db.Backup vacuum into: %w", err)
 	}
 	return path, nil
+}
+
+// Check runs SQLite's integrity check on the database file at path, opened
+// read-only, and fails unless it reports "ok".
+func Check(ctx context.Context, path string) error {
+	d, err := sql.Open(DriverName, "file:"+path+"?mode=ro")
+	if err != nil {
+		return fmt.Errorf("db.Check open: %w", err)
+	}
+	defer func() { _ = d.Close() }()
+	var res string
+	if err := d.QueryRowContext(ctx, `PRAGMA integrity_check`).Scan(&res); err != nil {
+		return fmt.Errorf("db.Check %s: %w", path, err)
+	}
+	if res != "ok" {
+		return fmt.Errorf("db.Check %s: %s", path, res)
+	}
+	return nil
+}
+
+// Prune deletes the oldest backups with the given label in dir so that keep
+// of them remain, and returns the deleted paths. Backups with other labels
+// (such as the pre-migration copies) are never touched.
+func Prune(dir, label string, keep int) ([]string, error) {
+	if keep < 1 {
+		return nil, fmt.Errorf("db.Prune: keep must be at least 1, got %d", keep)
+	}
+	files, err := filepath.Glob(filepath.Join(dir, "allmend-*-"+label+".db"))
+	if err != nil {
+		return nil, fmt.Errorf("db.Prune: %w", err)
+	}
+	// The UTC timestamp in the name sorts chronologically.
+	sort.Strings(files)
+	if len(files) <= keep {
+		return nil, nil
+	}
+	old := files[:len(files)-keep]
+	for _, f := range old {
+		if err := os.Remove(f); err != nil {
+			return nil, fmt.Errorf("db.Prune: %w", err)
+		}
+	}
+	return old, nil
 }
