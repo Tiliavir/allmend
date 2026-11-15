@@ -187,8 +187,8 @@ func (s *Server) Module(m account.Module, h func(http.ResponseWriter, *http.Requ
 const (
 	cspHeader = "Content-Security-Policy"
 	csp       = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
-	// cspMermaid only adds inline <style> (Mermaid's SVG output).
-	cspMermaid = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+	// cspDiagram only adds inline <style> (Mermaid's and Markmap's SVG output).
+	cspDiagram = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 )
 
 func securityHeaders(next http.Handler) http.Handler {

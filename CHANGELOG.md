@@ -4,6 +4,17 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.11.0] - 2026-11-15
+
+### Added
+
+- Seiten: a ```` ```markmap ```` block is drawn as a mind map (Markmap):
+  headings and lists become a left-to-right tree, branches open and close
+  with a click, ~~strikethrough~~ and links work. Groups keep their colour,
+  three levels are open at first. `d3` and `markmap-view` are vendored and
+  loaded only on such pages. A block with front matter (`---`) is rejected
+  on save, because options are not supported.
+
 ## [0.10.0] - 2026-11-15
 
 ### Added

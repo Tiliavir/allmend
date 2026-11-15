@@ -154,14 +154,25 @@ func (s *Server) seitenCreate(w http.ResponseWriter, r *http.Request, a account.
 		s.status(w, r, http.StatusBadRequest)
 		return
 	}
-	p, err := s.Pages.Create(r.Context(), a, parent, r.PostFormValue("title"), r.PostFormValue("body"))
-	if errors.Is(err, pages.ErrInvalid) {
+	msg, err := bodyError(r.PostFormValue("body"))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	var p pages.Page
+	if msg == "" {
+		p, err = s.Pages.Create(r.Context(), a, parent, r.PostFormValue("title"), r.PostFormValue("body"))
+	}
+	if msg != "" || errors.Is(err, pages.ErrInvalid) {
+		if msg == "" {
+			msg = invalidPage
+		}
 		d := seitenData{Title: r.PostFormValue("title"), Body: r.PostFormValue("body")}
 		if parent != "" {
 			d.Parent = &pages.Page{ID: parent}
 		}
 		s.render(w, r, http.StatusUnprocessableEntity, "seiten/edit", Page{Title: "Neue Seite", Module: account.Seiten,
-			Error: invalidPage, Data: d})
+			Error: msg, Data: d})
 		return
 	}
 	if errors.Is(err, pages.ErrPlace) {
@@ -175,6 +186,19 @@ func (s *Server) seitenCreate(w http.ResponseWriter, r *http.Request, a account.
 		return
 	}
 	s.redirect(w, r, "/seiten/"+p.Slug, "Seite angelegt.")
+}
+
+// bodyError checks that the page text renders; the message is for the
+// form, err for anything unexpected.
+func bodyError(body string) (string, error) {
+	_, err := markdown.Render(body, markdown.Tasks{})
+	switch {
+	case errors.Is(err, markdown.ErrMarkmap):
+		return "Markmap: Einstellungen am Anfang des Blocks (---) werden nicht unterstützt. Bitte entfernen.", nil
+	case err != nil:
+		return "", err
+	}
+	return "", nil
 }
 
 var invalidPage = fmt.Sprintf("Titel fehlt oder ist länger als %d Zeichen, oder der Text ist zu lang.", pages.MaxTitle)
@@ -214,9 +238,15 @@ func (s *Server) seitenView(w http.ResponseWriter, r *http.Request, a account.Ac
 		CanWrite: p.CanWrite(a), CanManage: p.CanManage(a),
 	}}
 	if res.HasMermaid {
-		pg.Scripts = []Script{{Src: "/static/vendor/mermaid-12.3.0.min.js"}, {Src: "/static/seiten.js", Module: true}}
-		// Mermaid writes <style> into its SVGs; scripts stay strictly 'self'.
-		w.Header().Set(cspHeader, cspMermaid)
+		pg.Scripts = append(pg.Scripts, Script{Src: "/static/vendor/mermaid-12.3.0.min.js"})
+	}
+	if res.HasMarkmap {
+		pg.Scripts = append(pg.Scripts, Script{Src: "/static/vendor/d3-7.9.0.min.js"}, Script{Src: "/static/vendor/markmap-view-0.18.13.js"})
+	}
+	if len(pg.Scripts) > 0 {
+		pg.Scripts = append(pg.Scripts, Script{Src: "/static/seiten.js", Module: true})
+		// Mermaid and Markmap write <style> into their SVGs; scripts stay strictly 'self'.
+		w.Header().Set(cspHeader, cspDiagram)
 	}
 	s.render(w, r, http.StatusOK, "seiten/view", pg)
 }
@@ -243,6 +273,21 @@ func (s *Server) seitenSave(w http.ResponseWriter, r *http.Request, a account.Ac
 		return
 	}
 	title, body := r.PostFormValue("title"), r.PostFormValue("body")
+	msg, err := bodyError(body)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if msg != "" {
+		p, err := s.Pages.Get(r.Context(), a, slug)
+		if err != nil {
+			s.pageError(w, r, err)
+			return
+		}
+		s.render(w, r, http.StatusUnprocessableEntity, "seiten/edit", Page{Title: p.Title + " bearbeiten", Module: account.Seiten,
+			Error: msg, Data: seitenData{Page: p, Title: title, Body: body, Base: base}})
+		return
+	}
 	p, err := s.Pages.Save(r.Context(), a, slug, base, title, body)
 	switch {
 	case errors.Is(err, pages.ErrConflict):
