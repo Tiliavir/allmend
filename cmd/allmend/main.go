@@ -39,6 +39,7 @@ import (
 	"github.com/tiliavir/allmend/internal/offline"
 	"github.com/tiliavir/allmend/internal/pages"
 	"github.com/tiliavir/allmend/internal/password"
+	"github.com/tiliavir/allmend/internal/places"
 	"github.com/tiliavir/allmend/internal/quotes"
 	"github.com/tiliavir/allmend/internal/schiffe"
 	"github.com/tiliavir/allmend/internal/session"
@@ -208,7 +209,7 @@ func newServer(st *store.Store, accounts *account.Service, baseCurrency string, 
 		Schiffe:      &schiffe.Service{Repo: st.Schiffe(), Accounts: st.Accounts()},
 		Ausgaben:     &ausgaben.Service{Repo: st.Ausgaben(), Accounts: st.Accounts(), Loc: loc},
 		Offline:      &offline.Service{Repo: st.Offline()},
-		Places:       st.Places(),
+		Places:       &places.Service{Repo: st.Places(), Loc: loc},
 		BaseCurrency: baseCurrency,
 		Sessions:     &session.Manager{Repo: st.Sessions(), Secure: secureCookie},
 		Templates:    tpl,

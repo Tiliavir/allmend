@@ -1,0 +1,10 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>Wo ich schon war</h1></div>
+{{template "ortenav" $d.Tab}}
+{{if not $d.Map}}<p class="muted">Noch keine Daten: importiere Reisen oder deinen Verlauf.</p>{{else}}
+<p class="muted small">{{int $d.Total}} Punkte aus Verlauf und Reisen. Nur für dich sichtbar.</p>
+<div class="card"><div class="map map-tall" id="karte" role="img" aria-label="Wärmekarte aller besuchten Orte"></div></div>
+<script type="application/json" id="karte-daten">{{$d.Map}}</script>
+{{end}}
+{{end}}

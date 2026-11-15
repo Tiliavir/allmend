@@ -4,6 +4,41 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.9.0] - 2026-11-15
+
+### Changed
+
+- Orte reworked (#6, ADR-20261115-orte), in three tabs:
+  - **Reisen** are imported from KML/KMZ files: name, description and
+    range come from the file, the form wins. Places (Point) need a name;
+    LineString and gx:Track become the track; areas are refused. The same
+    file twice is refused. Trips can be edited and deleted. Old trips
+    without (complete) range are marked red „Zeitraum fehlt“; saving them
+    needs both dates.
+  - **Verlauf** imports the `Timeline.json` that Google Maps exports on the
+    phone: path points and stays (Zuhause, Arbeit or unnamed). Only what is
+    newer than the last stored time is added, older entries are skipped and
+    counted; a gap to the last import is reported. Days follow the local
+    time of the points. Each import can be undone.
+  - **Karte**: a heatmap of the location history and all trips; the server
+    sends cells per zoom, never raw points (vendored Leaflet.heat 0.2.0).
+- Verlauf and Karte are only visible to their owner; trips stay readable
+  for everyone with access to Orte. Old addresses `/orte/listen/…` and
+  `/orte/zeitachse` redirect.
+
+### Removed
+
+- The import of Google's old `Records.json`; points imported before stay.
+
+### Migration
+
+- Schema step 14 (`orte`): tables `place_imports`, `place_points`,
+  `place_stays`, `place_track`; `place_lists.sha256`. A trip's old track
+  points move to `place_track`, all other points become one import per
+  file (days in Europe/Zurich); `place_visits` is dropped. It aborts on
+  ranges that end before they start, untimed points of no trip and points
+  linked to a place. Run `allmend migrate --dry-run` against a copy first.
+
 ## [0.8.0] - 2026-11-15
 
 ### Added

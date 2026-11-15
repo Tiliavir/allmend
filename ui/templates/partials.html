@@ -60,3 +60,9 @@
 <div class="ag-opts ag-c-{{.Key}}">{{$main := .Name}}{{range .Subs}}<label class="ag-card ag-opt" data-search="{{.Name}} {{$main}}"><input type="radio" name="category" value="{{.Key}}" required{{if eq .Key $cur.Key}} checked{{end}}>{{agicon .Key}}<span>{{.Name}}</span>{{icon "check"}}</label>{{end}}</div></div>
 {{end}}<p class="muted ag-none" hidden>Nichts gefunden.</p></div>
 </details></fieldset>{{end}}
+{{define "ortenav"}}<nav class="subnav" aria-label="Orte">
+<a href="/orte"{{if eq . "trips"}} aria-current="page"{{end}}>Reisen</a>
+<a href="/orte/verlauf"{{if eq . "history"}} aria-current="page"{{end}}>Verlauf</a>
+<a href="/orte/karte"{{if eq . "heat"}} aria-current="page"{{end}}>Karte</a>
+</nav>{{end}}
+{{define "range"}}{{if .MissingRange}}<span class="bad">Zeitraum fehlt</span>{{else}}{{dateDE .DateFrom}} – {{dateDE .DateTo}}{{end}}{{end}}

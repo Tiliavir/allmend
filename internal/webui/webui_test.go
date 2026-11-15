@@ -37,6 +37,7 @@ import (
 	"github.com/tiliavir/allmend/internal/offline"
 	"github.com/tiliavir/allmend/internal/pages"
 	"github.com/tiliavir/allmend/internal/password"
+	"github.com/tiliavir/allmend/internal/places"
 	"github.com/tiliavir/allmend/internal/schiffe"
 	"github.com/tiliavir/allmend/internal/session"
 	"github.com/tiliavir/allmend/internal/store"
@@ -86,7 +87,7 @@ func newEnv(t *testing.T) *env {
 	static, _ := fs.Sub(ui.Static, "static")
 	e.idp = newFakeGoogle(t)
 	s := &webui.Server{
-		Accounts: e.accounts, Links: &links.Service{Repo: st.Links()}, Pages: &pages.Service{Repo: st.Pages()}, Commute: &commute.Service{Repo: st.Commute()}, Velo: &velo.Service{Repo: st.Velo(), Loc: time.UTC}, Schiffe: &schiffe.Service{Repo: st.Schiffe(), Accounts: st.Accounts()}, Ausgaben: &ausgaben.Service{Repo: st.Ausgaben(), Accounts: st.Accounts(), Loc: time.UTC}, Offline: &offline.Service{Repo: st.Offline()}, Places: st.Places(), BaseCurrency: "EUR",
+		Accounts: e.accounts, Links: &links.Service{Repo: st.Links()}, Pages: &pages.Service{Repo: st.Pages()}, Commute: &commute.Service{Repo: st.Commute()}, Velo: &velo.Service{Repo: st.Velo(), Loc: time.UTC}, Schiffe: &schiffe.Service{Repo: st.Schiffe(), Accounts: st.Accounts()}, Ausgaben: &ausgaben.Service{Repo: st.Ausgaben(), Accounts: st.Accounts(), Loc: time.UTC}, Offline: &offline.Service{Repo: st.Offline()}, Places: &places.Service{Repo: st.Places(), Loc: time.UTC}, BaseCurrency: "EUR",
 		Finanzen:  &finanzen.Service{Repo: st.Finanzen(), Market: st.Finanzen(), Base: "EUR"},
 		Sessions:  &session.Manager{Repo: st.Sessions()},
 		Templates: tpl, Static: static, Location: time.UTC,
@@ -438,7 +439,8 @@ func TestPagesRender(t *testing.T) {
 		"velo":                     {admin, "/velo", 200},
 		"schiffe":                  {admin, "/schiffe", 200},
 		"orte":                     {admin, "/orte", 200},
-		"orte-zeitachse":           {admin, "/orte/zeitachse", 200},
+		"orte-verlauf-leer":        {admin, "/orte/verlauf", 200},
+		"orte-karte-leer":          {admin, "/orte/karte", 200},
 		"velo-2025":                {admin, "/velo?jahr=2025", 200},
 		"velo-touren":              {admin, "/velo/touren?jahr=2025", 200},
 		"velo-tour-neu":            {admin, "/velo/touren/neu", 200},
@@ -477,17 +479,9 @@ func TestPagesRender(t *testing.T) {
 	r = e.post(admin, "/schiffe", url.Values{"gegner": {kimAcc.ID}, "variante": {"grosses-meer"}})
 	pages["schiffe-aufstellung-gross"] = pageCase{admin, strings.SplitN(r.Header.Get("Location"), "?", 2)[0], 200}
 	aid := adminID(e)
-	if _, err := e.st.DB().ExecContext(context.Background(), `INSERT INTO places VALUES ('p1', ?, 'Basel', 'Rheinknie', 47.5596, 7.5886, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z');
-INSERT INTO place_lists VALUES ('l1', ?, 'Rhein', '', '2024-05-01', '2024-05-04', 'trip.json', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z');
-INSERT INTO place_list_places VALUES ('l1', 'p1');
-INSERT INTO place_visits VALUES ('v1', ?, NULL, 47.5, 7.6, '2024-05-03T10:00:00.000Z', NULL, 'trip.json');
-INSERT INTO place_lists VALUES ('l2', ?, 'Weg', '', '', '', 'weg.kmz', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z');
-INSERT INTO place_visits VALUES ('v2', ?, NULL, 46.1, 7.8, NULL, 0, 'weg.kmz'), ('v3', ?, NULL, 46.2, 7.8, NULL, 1, 'weg.kmz');`, aid, aid, aid, aid, aid, aid); err != nil {
-		t.Fatal(err)
+	for name, path := range orteSeed(t, e, aid) {
+		pages[name] = pageCase{admin, path, 200}
 	}
-	pages["orte-liste"] = pageCase{admin, "/orte/listen/l1", 200}
-	pages["orte-liste-ohne-zeit"] = pageCase{admin, "/orte/listen/l2", 200}
-	pages["orte-tag"] = pageCase{admin, "/orte/zeitachse?tag=2024-05-03", 200}
 	for name, path := range finSeed(t, e, admin) {
 		pages[name] = pageCase{admin, path, 200}
 	}
@@ -956,51 +950,6 @@ func (e *env) postBody(c *http.Client, path string, form url.Values) (*http.Resp
 	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(resp.Body)
 	return resp, string(b)
-}
-
-func TestOrte(t *testing.T) {
-	e := newEnv(t)
-	admin := e.loginAdmin()
-	ctx := context.Background()
-	adminAcc, _ := e.st.Accounts().ByEmail(ctx, adminEmail)
-	e.post(admin, "/verwaltung/konten", url.Values{"email": {"kim@example.org"}, "module": {"orte"}})
-	kimAcc, _ := e.st.Accounts().ByEmail(ctx, "kim@example.org")
-	pw, _ := e.accounts.ResetPassword(ctx, adminAcc, kimAcc.ID)
-	kim := e.client()
-	e.post(kim, "/anmelden", url.Values{"email": {"kim@example.org"}, "password": {pw}})
-	e.post(kim, "/konto/passwort", url.Values{"next": {"ein-langes-passwort"}})
-
-	upload := func(c *http.Client, body string) *http.Response {
-		var b strings.Builder
-		b.WriteString("--x\r\nContent-Disposition: form-data; name=\"datei\"; filename=\"Records.json\"\r\nContent-Type: application/json\r\n\r\n")
-		b.WriteString(body + "\r\n--x--\r\n")
-		req, _ := http.NewRequest(http.MethodPost, e.srv.URL+"/orte/import", strings.NewReader(b.String()))
-		req.Header.Set("Content-Type", "multipart/form-data; boundary=x")
-		req.Header.Set("Sec-Fetch-Site", "same-origin")
-		resp, err := c.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_ = resp.Body.Close()
-		return resp
-	}
-	if r := upload(admin, `{"locations":[{"latitudeE7":475596000,"longitudeE7":75886000,"timestamp":"2024-05-03T10:00:00Z"}]}`); r.Header.Get("Location") != "/orte/zeitachse" {
-		t.Fatalf("import: %d %s", r.StatusCode, r.Header.Get("Location"))
-	}
-	if r := upload(admin, `{"locations":[{"latitudeE7":1}]}`); r.Header.Get("Location") != "/orte" {
-		t.Errorf("bad import not rejected: %s", r.Header.Get("Location"))
-	}
-	// Kim reads the admin's timeline (with map CSP), but cannot import into it.
-	r, body := e.get(kim, "/orte/zeitachse?person="+adminAcc.ID)
-	if r.StatusCode != 200 || !strings.Contains(body, "1 Punkte am 2024-05-03") || !strings.Contains(r.Header.Get("Content-Security-Policy"), "tile.openstreetmap.org") {
-		t.Errorf("kim timeline: %d", r.StatusCode)
-	}
-	if strings.Contains(body, "Standortverlauf importieren") {
-		t.Error("import offered for someone else's data")
-	}
-	if r, _ := e.get(kim, "/orte?person=nobody"); r.StatusCode != http.StatusNotFound {
-		t.Errorf("unknown person: %d", r.StatusCode)
-	}
 }
 
 // TestManifest: the web app manifest makes Allmend installable as a

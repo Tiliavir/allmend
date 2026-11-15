@@ -320,7 +320,8 @@ table.fleet input[type="text"] { width: 72px; text-transform: uppercase; }
 
 /* ── Orte ───────────────────────────────────────────── */
 .map { height: 460px; border-radius: 10px; }
-@media (max-width: 640px) { .map { height: 340px; } }
+.map-tall { height: 560px; }
+@media (max-width: 640px) { .map { height: 340px; } .map-tall { height: 480px; } }
 
 /* Finanzen */
 :root {

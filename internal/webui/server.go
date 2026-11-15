@@ -44,7 +44,7 @@ type Server struct {
 	Schiffe    *schiffe.Service
 	Ausgaben   *ausgaben.Service
 	Offline    *offline.Service
-	Places     places.Repository
+	Places     *places.Service
 	Sessions   *session.Manager
 	Google     *google.Provider // nil: Google login disabled
 	Templates  Templates
