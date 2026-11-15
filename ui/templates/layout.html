@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{if .Title}}{{.Title}} · {{end}}Allmend</title>
+<title>{{if .Title}}{{.Title}} · {{end}}{{.App}}</title>
 <link rel="stylesheet" href="/static/allmend.css">
 {{with .DarkMedia}}<link rel="stylesheet" href="/static/dark.css" media="{{.}}">
 {{end}}<link rel="icon" href="/static/allmend.svg" type="image/svg+xml">
@@ -16,7 +16,7 @@
 </head>
 <body class="{{if .Module}}m-{{.Module}}{{end}}">
 <header class="site-header">
-<a class="brand" href="/">{{icon "logo"}}Allmend</a>
+<a class="brand" href="/">{{icon "logo"}}{{.App}}</a>
 {{if .Account}}<nav class="nav" aria-label="Module">
 {{range .Nav}}<a href="{{.Path}}"{{if .Current}} aria-current="page"{{end}}>{{.Name}}</a>
 {{end}}</nav>

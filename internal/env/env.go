@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Config is the complete runtime configuration.
@@ -28,6 +30,10 @@ type Config struct {
 
 	AlphaVantageKey string
 	FrankfurterURL  string
+
+	// AppName is shown in the page title, the header and as the name of the
+	// installed app (web app manifest), default "Allmend".
+	AppName string
 }
 
 // DBPath is the path of the Allmend database file.
@@ -45,7 +51,11 @@ var known = map[string]bool{
 	"ALLMEND_SECURE_COOKIE": true, "ALLMEND_GOOGLE_CLIENT_ID": true,
 	"ALLMEND_GOOGLE_CLIENT_SECRET": true, "ALLMEND_ALPHAVANTAGE_KEY": true,
 	"ALLMEND_BASE_CURRENCY": true, "ALLMEND_FRANKFURTER_URL": true,
+	"ALLMEND_APP_NAME": true,
 }
+
+// maxAppName keeps the name readable in the header and under the app icon.
+const maxAppName = 30
 
 // Load reads the configuration from environ (os.Environ() format).
 func Load(environ []string) (Config, error) {
@@ -74,6 +84,10 @@ func Load(environ []string) (Config, error) {
 		FrankfurterURL:     vars["ALLMEND_FRANKFURTER_URL"],
 		SecureCookie:       true,
 		BaseCurrency:       or(vars["ALLMEND_BASE_CURRENCY"], "EUR"),
+		AppName:            or(vars["ALLMEND_APP_NAME"], "Allmend"),
+	}
+	if err := validAppName(c.AppName); err != nil {
+		errs = append(errs, fmt.Errorf("ALLMEND_APP_NAME: %w", err))
 	}
 	if len(c.BaseCurrency) != 3 || strings.ToUpper(c.BaseCurrency) != c.BaseCurrency {
 		errs = append(errs, errors.New("ALLMEND_BASE_CURRENCY must be an upper-case ISO 4217 code"))
@@ -119,6 +133,20 @@ func Load(environ []string) (Config, error) {
 		return Config{}, fmt.Errorf("env.Load: %w", errors.Join(errs...))
 	}
 	return c, nil
+}
+
+// validAppName rejects names that would not show as typed: surrounding or
+// repeated blanks, control characters, more than maxAppName characters.
+func validAppName(n string) error {
+	switch {
+	case strings.TrimSpace(n) != n || strings.Contains(n, "  "):
+		return errors.New("no leading, trailing or double blanks")
+	case utf8.RuneCountInString(n) > maxAppName:
+		return fmt.Errorf("at most %d characters", maxAppName)
+	case !utf8.ValidString(n) || strings.ContainsFunc(n, unicode.IsControl):
+		return errors.New("no control characters")
+	}
+	return nil
 }
 
 func or(v, def string) string {

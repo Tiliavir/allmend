@@ -4,6 +4,14 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.10.0] - 2026-11-15
+
+### Added
+
+- `ALLMEND_APP_NAME` sets the displayed name (page title, header) and the
+  name of the installed app (web app manifest `name` and `short_name`).
+  Default `Allmend`; at most 30 characters, no surrounding or double blanks.
+
 ## [0.9.1] - 2026-11-15
 
 ### Fixed

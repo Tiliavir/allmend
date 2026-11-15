@@ -17,6 +17,7 @@ DSM reverse proxy (HTTPS), LAN only. Data in the volume `/app/data`:
 | `ALLMEND_BASE_CURRENCY` | no | Default currency for new amounts, default `EUR`. |
 | `ALLMEND_ALPHAVANTAGE_KEY` | for prices | Alpha Vantage key (free tier: 25 calls a day). Without it only exchange rates are loaded. |
 | `ALLMEND_FRANKFURTER_URL` | no | Exchange rates, default `https://api.frankfurter.dev/v1`; a self-hosted Frankfurter works too. |
+| `ALLMEND_APP_NAME` | no | Displayed name and name of the installed app, default `Allmend` (max. 30 characters). |
 | `ALLMEND_SECURE_COOKIE` | no | `false` only for plain-HTTP development. |
 
 Unknown `ALLMEND_*` variables stop the start.

@@ -54,6 +54,9 @@ type Server struct {
 	BaseCurrency string
 	// Demo renders the pages for the static demo (allmend demo).
 	Demo bool
+	// AppName is the displayed name and the name of the installed app;
+	// empty means "Allmend".
+	AppName string
 
 	hub hub
 	sw  swCache
@@ -77,6 +80,7 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", staticFiles(s.Static)))
+	mux.HandleFunc("GET /static/"+manifestFile, s.manifest)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
 
 	mux.HandleFunc("GET /{$}", s.start)
