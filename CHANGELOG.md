@@ -12,6 +12,8 @@ versions: [Semantic Versioning](https://semver.org/). Releasing is described in
   (a bare list of segments with `geo:` coordinates, numbers as text and
   path times as minute offsets, e.g. newer Android exports and iOS). A file
   without `semanticSegments` now names the fields it has instead.
+- The import help describes the export in the phone's settings
+  (Standort › Standortdienste › Zeitachse › Zeitachsendaten exportieren).
 
 ## [0.9.0] - 2026-11-15
 
