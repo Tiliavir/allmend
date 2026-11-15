@@ -4,6 +4,20 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.9.1] - 2026-11-15
+
+### Fixed
+
+- Orte, Timeline.json import: also reads the second shape Google exports
+  (a bare list of segments with `geo:` coordinates, numbers as text and
+  path times as minute offsets, e.g. newer Android exports and iOS). A file
+  without `semanticSegments` now names the fields it has instead.
+- The import help describes the export in the phone's settings
+  (Standort › Standortdienste › Zeitachse › Zeitachsendaten exportieren).
+- Timeline.json import needs far less memory: entries are written while the
+  file is read, still in one transaction (a bad entry stores nothing). A
+  60 MB file peaks at about 60 MB instead of 230 MB.
+
 ## [0.9.0] - 2026-11-15
 
 ### Changed

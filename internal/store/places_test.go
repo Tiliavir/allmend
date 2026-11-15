@@ -144,6 +144,10 @@ func TestPlacesTripsAndHistory(t *testing.T) {
 	if err != nil || r4.Import.ID != "" || r4.Import.Skipped != 1 {
 		t.Fatalf("nothing new %+v %v", r4, err)
 	}
+	// A bad entry at the end: the points written before it are rolled back.
+	if _, err := svc.ImportTimeline(ctx, anna, "Timeline.json", file(seg("2026-11-11T10:00:00.000+01:00", "47.6"), seg("2026-11-12T10:00:00.000+01:00", "95.0"))); err == nil {
+		t.Fatal("bad entry accepted")
+	}
 	p := s.Places()
 	if days, _ := p.Days(ctx, "anna"); strings.Join(days, " ") != "2026-11-01 2026-11-02 2026-11-04 2026-11-10" {
 		t.Errorf("days %v", days)

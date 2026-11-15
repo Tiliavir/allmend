@@ -17,7 +17,13 @@
 {{end}}
 <details class="card"><summary>Timeline.json importieren</summary>
 <form class="stack" method="post" action="/orte/verlauf" enctype="multipart/form-data">
-<p class="muted small">Google Maps auf dem Handy › Einstellungen › Standort › Zeitachse › Zeitachsendaten exportieren. Übernommen wird nur, was neuer ist als dein letzter Stand{{if $d.Last}} (Import vom {{$d.Last.At.Format "02.01.2006"}}){{end}}; Älteres wird übersprungen. Ein fehlerhafter Eintrag bricht den ganzen Import ab.</p>
+<ol class="muted small">
+<li>Auf dem Handy die Einstellungen öffnen (nicht Google Maps).</li>
+<li>Standort › Standortdienste › Zeitachse antippen.</li>
+<li>„Zeitachsendaten exportieren“ antippen.</li>
+<li>„Weiter“ antippen und einen Ordner wählen, z. B. Downloads. Dort liegt dann <code>Timeline.json</code>.</li>
+</ol>
+<p class="muted small">Die Datei hier hochladen, nicht gezippt. Übernommen wird nur, was neuer ist als dein letzter Stand{{if $d.Last}} (Import vom {{$d.Last.At.Format "02.01.2006"}}){{end}}; Älteres wird übersprungen. Ein fehlerhafter Eintrag bricht den ganzen Import ab.</p>
 <label>Datei<input type="file" name="datei" accept="application/json,.json" required></label>
 <div class="actions"><button class="button" type="submit">Importieren</button></div>
 </form></details>
