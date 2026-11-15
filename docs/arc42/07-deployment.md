@@ -29,6 +29,21 @@ Unknown `ALLMEND_*` variables stop the start.
    `<ALLMEND_BASE_URL>/anmelden/google/zurueck`.
 3. Set client ID and secret as environment variables.
 
+## Backup
+
+`allmend backup` writes a consistent copy of the database to
+`backup/allmend-<UTC time>-manual.db` while the server keeps running
+(`VACUUM INTO`), then runs SQLite's integrity check on the copy. With
+`-keep N` it afterwards deletes the oldest manual backups so that N remain;
+the pre-migration backups are never deleted.
+
+```sh
+docker compose exec allmend /app/allmend backup -keep 14
+```
+
+On the NAS: DSM task scheduler, daily, shortly before the Hyper Backup run,
+so Hyper Backup picks up a consistent file instead of the live WAL database.
+
 ## Upgrade
 
 1. Copy the data volume (or use a Hyper Backup snapshot).
