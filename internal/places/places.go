@@ -1,94 +1,176 @@
-// Package places holds an account's places, trips (lists of places) and GPS
-// visits imported from Google Location History ("Orte"). The owner writes;
-// everyone with module access may read. A fundamental rework is planned (#6).
+// Package places is the Orte module (ADR-20261115-orte): trips imported from
+// KML/KMZ, the location history imported from Google's Timeline.json, and a
+// heatmap of both. Trips are readable by everyone with access; the location
+// history belongs to its owner alone.
 package places
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
-	"math"
+	"strings"
 	"time"
-
-	"github.com/tiliavir/allmend/internal/id"
 )
 
-// Place is a named point.
+// Place is a named point of a trip.
 type Place struct {
 	ID, OwnerID         string
 	Name, Description   string
 	Latitude, Longitude float64
 }
 
-// List is a trip with its places.
+// List is a trip.
 type List struct {
 	ID, OwnerID       string
 	Name, Description string
-	DateFrom, DateTo  string // YYYY-MM-DD or ""
-	SourceFile        string // GPS visits of this file belong to the trip
+	DateFrom, DateTo  string // YYYY-MM-DD; old trips may lack one or both
+	SourceFile        string // name of the imported file, may be ""
+	SHA256            string // of the imported file; "" for old trips
 	PlaceCount        int
+	TrackCount        int
 }
 
-// Visit is one GPS point. A point of a track drawn without times (old KMZ
-// lines) has no Timestamp (zero) but its position Seq in the track.
-type Visit struct {
-	ID, OwnerID         string
-	PlaceID             string
+// MissingRange reports an old trip whose range is empty or incomplete.
+func (l List) MissingRange() bool { return l.DateFrom == "" || l.DateTo == "" }
+
+// TrackPoint is one point of a trip's track; At is zero for lines drawn
+// without times.
+type TrackPoint struct {
+	At                  time.Time
 	Latitude, Longitude float64
-	Timestamp           time.Time
-	Seq                 int // only without Timestamp
-	SourceFile          string
 }
 
-// ErrNotFound means no such list.
-var ErrNotFound = errors.New("places: not found")
+// Point is one point of the location history.
+type Point struct {
+	At                  time.Time
+	Offset              *int   // UTC offset in minutes at the source; nil for old data
+	Day                 string // local day, YYYY-MM-DD
+	Latitude, Longitude float64
+}
 
-// Repository stores places data, always for one owner.
+// Stay is a stay from Timeline.json. The file names no place, only a kind.
+type Stay struct {
+	Start, End          time.Time
+	Offset              int // UTC offset in minutes at the start
+	Day, EndDay         string
+	Latitude, Longitude float64
+	SemanticType        string // Google's semanticType, e.g. HOME, UNKNOWN
+}
+
+// Label is the German name of a stay's kind, "" for an unnamed one.
+func (s Stay) Label() string {
+	switch s.SemanticType {
+	case "HOME", "INFERRED_HOME":
+		return "Zuhause"
+	case "WORK", "INFERRED_WORK":
+		return "Arbeit"
+	}
+	return ""
+}
+
+// Import is one location history import.
+type Import struct {
+	ID, OwnerID string
+	Kind        string // "timeline" or "records" (old Records.json)
+	FileName    string
+	At          time.Time
+	Points      int
+	Stays       int
+	Skipped     int
+}
+
+// Cell is one heatmap cell: its centre and the number of points in it.
+type Cell struct {
+	Latitude, Longitude float64
+	N                   int
+}
+
+// Box is a map view in degrees.
+type Box struct{ South, West, North, East float64 }
+
+// Errors.
+var (
+	ErrNotFound  = errors.New("places: not found")
+	ErrDuplicate = errors.New("places: file already imported")
+)
+
+// Repository stores Orte data, always for one owner.
 type Repository interface {
-	Lists(ctx context.Context, owner string) ([]List, error)
+	Lists(ctx context.Context, owner string) ([]List, error) // newest range first, old trips last
 	List(ctx context.Context, owner, id string) (List, []Place, error)
-	VisitsBySource(ctx context.Context, owner, source string) ([]Visit, error)
-	VisitDays(ctx context.Context, owner string) ([]string, error) // YYYY-MM-DD (UTC), ascending
-	VisitsOn(ctx context.Context, owner string, from, to time.Time) ([]Visit, error)
-	// InsertVisits adds timed visits, skipping ones that exist (same source and time); returns the number added.
-	// A visit without a time is an error (untimed points came only from the almanac import up to 0.3.0).
-	InsertVisits(ctx context.Context, vs []Visit) (int, error)
+	Track(ctx context.Context, owner, listID string) ([]TrackPoint, error)
+	// InsertTrip stores a trip with its places and track in one
+	// transaction; ErrDuplicate if the owner imported the same file before.
+	InsertTrip(ctx context.Context, l List, ps []Place, track []TrackPoint) error
+	UpdateTrip(ctx context.Context, l List) error // name, description, range
+	// DeleteTrip removes the trip, its track and the places of no other trip.
+	DeleteTrip(ctx context.Context, owner, id string) error
+
+	// Mark is the newest time in the owner's location history (points and
+	// stay starts); ok is false if there is none.
+	Mark(ctx context.Context, owner string) (mark time.Time, ok bool, err error)
+	// InsertImport stores an import with its points and stays in one transaction.
+	InsertImport(ctx context.Context, imp Import, pts []Point, stays []Stay) error
+	Imports(ctx context.Context, owner string) ([]Import, error) // newest first
+	DeleteImport(ctx context.Context, owner, id string) error    // with its points and stays
+
+	Days(ctx context.Context, owner string) ([]string, error) // days with points or stays, ascending
+	PointsOn(ctx context.Context, owner, day string) ([]Point, error)
+	PointsBetween(ctx context.Context, owner, fromDay, toDay string) ([]Point, error)
+	StaysOn(ctx context.Context, owner, day string) ([]Stay, error)
+	// Heat counts the owner's points, track points and places per cell of
+	// size deg inside b.
+	Heat(ctx context.Context, owner string, deg float64, b Box) ([]Cell, error)
+	// Bounds is the box around everything Heat counts; ok false if empty.
+	Bounds(ctx context.Context, owner string) (b Box, ok bool, err error)
 }
 
-// ParseGoogleLocation reads a Google Takeout location history file
-// ({"locations":[{"latitudeE7":…,"longitudeE7":…,"timestamp":"…"}]}).
-// Any location without a valid timestamp or coordinates is an error.
-func ParseGoogleLocation(r io.Reader, owner, source string) ([]Visit, error) {
-	var doc struct {
-		Locations []struct {
-			LatitudeE7  *int64  `json:"latitudeE7"`
-			LongitudeE7 *int64  `json:"longitudeE7"`
-			Timestamp   *string `json:"timestamp"`
-		} `json:"locations"`
+// Problems lists what is wrong with user input (German).
+type Problems []string
+
+func (p *Problems) add(cond bool, msg string) {
+	if cond {
+		*p = append(*p, msg)
 	}
-	dec := json.NewDecoder(r)
-	if err := dec.Decode(&doc); err != nil {
-		return nil, fmt.Errorf("Datei ist kein gültiges Google-Location-JSON: %w", err)
+}
+
+// Err returns nil or an error carrying the problems.
+func (p Problems) Err() error {
+	if len(p) == 0 {
+		return nil
 	}
-	if doc.Locations == nil {
-		return nil, errors.New(`Datei enthält kein Feld "locations"`)
+	return &InvalidError{p}
+}
+
+// InvalidError lists input problems.
+type InvalidError struct{ Problems Problems }
+
+func (e *InvalidError) Error() string { return "places: invalid: " + strings.Join(e.Problems, "; ") }
+
+// ValidDate reports whether s is a calendar date "YYYY-MM-DD".
+func ValidDate(s string) bool {
+	if len(s) != 10 {
+		return false
 	}
-	out := make([]Visit, 0, len(doc.Locations))
-	for i, l := range doc.Locations {
-		if l.LatitudeE7 == nil || l.LongitudeE7 == nil || l.Timestamp == nil {
-			return nil, fmt.Errorf("Eintrag %d: Koordinaten oder Zeitstempel fehlen", i+1)
-		}
-		ts, err := time.Parse(time.RFC3339Nano, *l.Timestamp)
-		if err != nil {
-			return nil, fmt.Errorf("Eintrag %d: Zeitstempel %q ungültig", i+1, *l.Timestamp)
-		}
-		lat, lon := float64(*l.LatitudeE7)/1e7, float64(*l.LongitudeE7)/1e7
-		if math.Abs(lat) > 90 || math.Abs(lon) > 180 {
-			return nil, fmt.Errorf("Eintrag %d: Koordinaten außerhalb der Erde", i+1)
-		}
-		out = append(out, Visit{ID: id.New(), OwnerID: owner, Latitude: lat, Longitude: lon, Timestamp: ts.UTC(), SourceFile: source})
+	_, err := time.Parse(time.DateOnly, s)
+	return err == nil
+}
+
+// CheckTrip validates a trip's own fields; a full range is required.
+func CheckTrip(l List) error {
+	var p Problems
+	p.add(strings.TrimSpace(l.Name) == "" || len([]rune(l.Name)) > 120, "Name fehlt oder ist zu lang")
+	p.add(len(l.Description) > 20000, "Beschreibung ist zu lang")
+	switch {
+	case l.DateFrom == "" || l.DateTo == "":
+		p.add(true, "Zeitraum fehlt (Von und Bis)")
+	case !ValidDate(l.DateFrom) || !ValidDate(l.DateTo):
+		p.add(true, "Von und Bis müssen gültige Daten sein")
+	default:
+		p.add(l.DateTo < l.DateFrom, "Bis liegt vor Von")
 	}
-	return out, nil
+	return p.Err()
+}
+
+func validLatLon(lat, lon float64) bool {
+	return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
 }

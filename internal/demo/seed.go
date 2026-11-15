@@ -8,13 +8,14 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/tiliavir/allmend/internal/account"
 	"github.com/tiliavir/allmend/internal/ausgaben"
 	"github.com/tiliavir/allmend/internal/commute"
 	"github.com/tiliavir/allmend/internal/finanzen"
-	"github.com/tiliavir/allmend/internal/id"
 	"github.com/tiliavir/allmend/internal/links"
 	"github.com/tiliavir/allmend/internal/pages"
 	"github.com/tiliavir/allmend/internal/places"
@@ -35,7 +36,7 @@ type Deps struct {
 	Finanzen *finanzen.Service
 	Schiffe  *schiffe.Service
 	Ausgaben *ausgaben.Service
-	Places   places.Repository
+	Places   *places.Service
 }
 
 type seeder struct {
@@ -43,6 +44,7 @@ type seeder struct {
 	ctx   context.Context
 	rnd   *rand.Rand
 	today time.Time // local date, midnight
+	loc   *time.Location
 }
 
 // Seed fills an empty database with the demo family. The admin must exist
@@ -50,7 +52,7 @@ type seeder struct {
 // current year always has data; the same seed gives the same data.
 func Seed(ctx context.Context, d Deps, now time.Time, loc *time.Location) (account.Account, error) {
 	y, m, day := now.In(loc).Date()
-	s := &seeder{Deps: d, ctx: ctx, rnd: rand.New(rand.NewPCG(1866, 2026)), today: time.Date(y, m, day, 0, 0, 0, 0, time.UTC)} //nolint:gosec // demo data, not security
+	s := &seeder{Deps: d, ctx: ctx, rnd: rand.New(rand.NewPCG(1866, 2026)), today: time.Date(y, m, day, 0, 0, 0, 0, time.UTC), loc: loc} //nolint:gosec // demo data, not security
 	anna, err := d.Accounts.Repo.ByEmail(ctx, AdminEmail)
 	if err != nil {
 		return anna, fmt.Errorf("demo: admin: %w", err)
@@ -278,26 +280,89 @@ var lakeRoute = [][3]float64{ // lat, lon, day
 	{47.5050, 9.7420, 2}, {47.4900, 9.5600, 2}, {47.5600, 9.3800, 2}, {47.6580, 9.1750, 2},
 }
 
+// Workdays around Basel: home, office, back.
+var basel = [][2]float64{{47.5480, 7.5880}, {47.5560, 7.5930}, {47.5600, 7.6000}, {47.5640, 7.6080}}
+
+// places seeds a trip from a KML file and the location history from a
+// Timeline.json, both through the importers.
 func (s *seeder) places(f *family) error {
 	first := s.today.AddDate(0, 0, -60)
-	var vs []places.Visit
-	for i := 0; i+1 < len(lakeRoute); i++ {
-		a, b := lakeRoute[i], lakeRoute[i+1]
-		if a[2] != b[2] {
+	var kml strings.Builder
+	kml.WriteString(`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Bodensee-Runde</name>` +
+		`<description>Drei Tage mit dem Velo einmal um den See.</description>`)
+	for _, p := range []struct {
+		name     string
+		lat, lon float64
+	}{{"Konstanz", 47.6603, 9.1758}, {"Meersburg", 47.6950, 9.2700}, {"Friedrichshafen", 47.6560, 9.4790}, {"Bregenz", 47.5050, 9.7420}, {"Arbon", 47.5160, 9.4330}} {
+		fmt.Fprintf(&kml, `<Placemark><name>%s</name><Point><coordinates>%.4f,%.4f</coordinates></Point></Placemark>`, p.name, p.lon, p.lat)
+	}
+	kml.WriteString(`<Placemark><name>Route</name><LineString><coordinates>`)
+	for _, p := range lakeRoute {
+		fmt.Fprintf(&kml, "%.4f,%.4f ", p[1], p[0])
+	}
+	kml.WriteString(`</coordinates></LineString></Placemark></Document></kml>`)
+	trip := places.TripForm{DateFrom: first.Format(time.DateOnly), DateTo: first.AddDate(0, 0, 2).Format(time.DateOnly)}
+	if _, err := s.Places.ImportTrip(s.ctx, f.anna, "bodensee.kml", []byte(kml.String()), trip); err != nil {
+		return err
+	}
+	ben := `<kml><Document><name>Toskana</name><Placemark><name>Siena</name><Point><coordinates>11.3308,43.3188</coordinates></Point></Placemark>` +
+		`<Placemark><name>Florenz</name><Point><coordinates>11.2558,43.7696</coordinates></Point></Placemark></Document></kml>`
+	if _, err := s.Places.ImportTrip(s.ctx, f.ben, "toskana.kml", []byte(ben), places.TripForm{DateFrom: s.date(120), DateTo: s.date(110)}); err != nil {
+		return err
+	}
+
+	var segs []string
+	at := func(t time.Time) string { return t.In(s.loc).Format("2006-01-02T15:04:05.000-07:00") }
+	ll := func(lat, lon float64) string { return fmt.Sprintf("%.6f°, %.6f°", lat, lon) }
+	path := func(pts [][2]float64, start time.Time, step time.Duration) {
+		var b strings.Builder
+		for k, p := range pts {
+			if k > 0 {
+				b.WriteString(",")
+			}
+			fmt.Fprintf(&b, `{"point":%q,"time":%q}`, ll(p[0], p[1]), at(start.Add(time.Duration(k)*step)))
+		}
+		end := start.Add(time.Duration(len(pts)-1) * step)
+		segs = append(segs, fmt.Sprintf(`{"startTime":%q,"endTime":%q,"timelinePath":[%s]}`, at(start), at(end), b.String()))
+	}
+	stay := func(kind string, lat, lon float64, from, to time.Time) {
+		segs = append(segs, fmt.Sprintf(`{"startTime":%q,"endTime":%q,"visit":{"hierarchyLevel":0,"probability":0.9,"topCandidate":{"placeId":"demo","semanticType":%q,"probability":0.8,"placeLocation":{"latLng":%q}}}}`,
+			at(from), at(to), kind, ll(lat, lon)))
+	}
+	local := func(day time.Time, h, m int) time.Time {
+		return time.Date(day.Year(), day.Month(), day.Day(), h, m, 0, 0, s.loc)
+	}
+	for d := range 3 {
+		day := first.AddDate(0, 0, d)
+		var pts [][2]float64
+		for i := 0; i+1 < len(lakeRoute); i++ {
+			a, b := lakeRoute[i], lakeRoute[i+1]
+			if int(a[2]) != d || a[2] != b[2] {
+				continue
+			}
+			for k := range 20 {
+				t := float64(k) / 20
+				pts = append(pts, [2]float64{a[0] + (b[0]-a[0])*t + (s.rnd.Float64()-0.5)*0.002, a[1] + (b[1]-a[1])*t + (s.rnd.Float64()-0.5)*0.002})
+			}
+		}
+		path(pts, local(day, 9, 0), 3*time.Minute)
+		end := lakeRoute[4*d+3]
+		stay("UNKNOWN", end[0], end[1], local(day, 18, 0), local(day.AddDate(0, 0, 1), 8, 30))
+	}
+	for d := 14; d >= 1; d-- {
+		day := s.today.AddDate(0, 0, -d)
+		if wd := day.Weekday(); wd == time.Saturday || wd == time.Sunday {
 			continue
 		}
-		day := first.AddDate(0, 0, int(a[2]))
-		for k := range 20 {
-			t := float64(k) / 20
-			at := day.Add(time.Duration(9*60+(i%4)*60+k*3) * time.Minute)
-			vs = append(vs, places.Visit{
-				ID: id.New(), OwnerID: f.anna.ID, SourceFile: "demo.json", Timestamp: at,
-				Latitude:  a[0] + (b[0]-a[0])*t + (s.rnd.Float64()-0.5)*0.002,
-				Longitude: a[1] + (b[1]-a[1])*t + (s.rnd.Float64()-0.5)*0.002,
-			})
-		}
+		stay("HOME", basel[0][0], basel[0][1], local(day, 0, 0), local(day, 7, 30))
+		path(basel, local(day, 7, 35), 5*time.Minute)
+		stay("WORK", basel[3][0], basel[3][1], local(day, 7, 55), local(day, 17, 0))
+		back := slices.Clone(basel)
+		slices.Reverse(back)
+		path(back, local(day, 17, 10), 6*time.Minute)
 	}
-	_, err := s.Places.InsertVisits(s.ctx, vs)
+	tl := `{"semanticSegments":[` + strings.Join(segs, ",") + `],"rawSignals":[],"userLocationProfile":{}}`
+	_, err := s.Places.ImportTimeline(s.ctx, f.anna, "Timeline.json", strings.NewReader(tl))
 	return err
 }
 

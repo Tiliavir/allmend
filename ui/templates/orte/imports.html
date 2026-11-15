@@ -1,0 +1,13 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-title"><h1>Importe</h1><a class="button secondary" href="/orte/verlauf">Zum Verlauf</a></div>
+{{template "ortenav" $d.Tab}}
+{{if $d.Imports}}<div class="card"><ul class="list">{{range $d.Imports}}<li><span>{{.FileName}} <span class="muted small">{{.At.Format "02.01.2006 15:04"}} UTC{{if eq .Kind "records"}} · alter Standortverlauf{{end}}</span></span>
+<span class="muted small">{{int .Points}} Punkte · {{int .Stays}} Aufenthalte{{if .Skipped}} · {{int .Skipped}} übersprungen{{end}}</span>
+<details><summary>Rückgängig machen</summary><form class="stack" method="post" action="/orte/verlauf/importe/{{.ID}}/loeschen">
+<label class="check"><input type="checkbox" name="confirm" value="1" required>Ja, diesen Import mit seinen Punkten und Aufenthalten entfernen</label>
+<div class="actions"><button class="button danger" type="submit">Entfernen</button></div>
+</form></details></li>
+{{end}}</ul></div>{{else}}<p class="muted">Keine Importe.</p>{{end}}
+<p class="muted small">Nach dem Entfernen übernimmt ein neuer Import wieder alles ab dem dann letzten Stand.</p>
+{{end}}

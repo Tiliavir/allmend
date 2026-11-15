@@ -1,0 +1,19 @@
+{{define "content"}}
+{{$l := .Data.List}}
+<div class="page-title"><h1>Reise bearbeiten</h1><a class="button secondary" href="/orte/reisen/{{$l.ID}}">Abbrechen</a></div>
+<form class="stack" method="post" action="/orte/reisen/{{$l.ID}}">
+<label>Name<input type="text" name="name" maxlength="120" required value="{{$l.Name}}"></label>
+<div class="fields">
+<label>Von<input type="date" name="von" required value="{{$l.DateFrom}}"></label>
+<label>Bis<input type="date" name="bis" required value="{{$l.DateTo}}"></label>
+</div>
+<label>Beschreibung<textarea name="beschreibung" rows="4">{{$l.Description}}</textarea></label>
+<div class="actions"><button class="button" type="submit">Speichern</button></div>
+</form>
+<details class="card"><summary>Reise löschen</summary>
+<form class="stack" method="post" action="/orte/reisen/{{$l.ID}}/loeschen">
+<p class="muted small">Löscht die Reise mit ihren Orten und ihrem Track. Dein Verlauf bleibt.</p>
+<label class="check"><input type="checkbox" name="confirm" value="1" required>Ja, diese Reise löschen</label>
+<div class="actions"><button class="button danger" type="submit">Löschen</button></div>
+</form></details>
+{{end}}

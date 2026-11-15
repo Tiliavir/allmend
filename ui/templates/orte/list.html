@@ -1,9 +1,12 @@
 {{define "content"}}
-{{$d := .Data}}
-<div class="page-title"><h1>{{$d.List.Name}}</h1><a class="button secondary" href="/orte?person={{$d.PersonID}}">Alle Reisen</a></div>
-{{if $d.List.DateFrom}}<p class="muted">{{$d.List.DateFrom}}{{if $d.List.DateTo}} – {{$d.List.DateTo}}{{end}}</p>{{end}}
-{{if $d.List.Description}}<p class="pre">{{$d.List.Description}}</p>{{end}}
-<div class="card"><div class="map" id="karte" role="img" aria-label="Karte mit {{len $d.Places}} Orten"></div></div>
+{{$d := .Data}}{{$l := $d.List}}
+<div class="page-title"><h1>{{$l.Name}}</h1><a class="button secondary" href="/orte{{if not $d.Own}}?person={{$d.PersonID}}{{end}}">Alle Reisen</a></div>
+{{template "ortenav" $d.Tab}}
+<p class="muted">{{template "range" $l}} · {{len $d.Places}} Orte{{if $l.SourceFile}} · aus {{$l.SourceFile}}{{end}}{{if not $d.Own}} · {{$d.Person}}{{end}}</p>
+{{if $l.Description}}<p class="pre">{{$l.Description}}</p>{{end}}
+<div class="card"><div class="map" id="karte" role="img" aria-label="Karte mit {{len $d.Places}} Orten{{if $l.TrackCount}} und Track{{end}}"></div>
+{{if and $d.Own (not $l.MissingRange)}}<p class="small">{{if $d.Verlauf}}<a href="/orte/reisen/{{$l.ID}}">Verlauf ausblenden</a>{{else}}<a href="/orte/reisen/{{$l.ID}}?verlauf=1">Meinen Verlauf in diesem Zeitraum zeigen</a>{{end}} <span class="muted">(nur für dich, gestrichelt)</span></p>{{end}}</div>
 <script type="application/json" id="karte-daten">{{$d.Map}}</script>
-{{if $d.Places}}<div class="card"><ul class="list">{{range $d.Places}}<li><span>{{.Name}}</span><span class="muted small">{{if .Description}}{{.Description}}{{end}}</span></li>{{end}}</ul></div>{{end}}
+{{if $d.Places}}<div class="card"><ul class="list">{{range $d.Places}}<li><span>{{.Name}}</span>{{if .Description}}<span class="muted small">{{.Description}}</span>{{end}}</li>{{end}}</ul></div>{{end}}
+{{if $d.Own}}<div class="actions"><a class="button secondary" href="/orte/reisen/{{$l.ID}}/bearbeiten">Bearbeiten</a></div>{{end}}
 {{end}}

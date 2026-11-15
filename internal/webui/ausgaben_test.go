@@ -35,12 +35,17 @@ func (e *env) agLogin(admin *http.Client, email string, modules ...string) (*htt
 
 func (e *env) upload(c *http.Client, path string, fields map[string]string, file string) *http.Response {
 	e.t.Helper()
+	return e.uploadAs(c, path, fields, "export.csv", file)
+}
+
+func (e *env) uploadAs(c *http.Client, path string, fields map[string]string, name, file string) *http.Response {
+	e.t.Helper()
 	var b bytes.Buffer
 	mw := multipart.NewWriter(&b)
 	for k, v := range fields {
 		_ = mw.WriteField(k, v)
 	}
-	fw, _ := mw.CreateFormFile("datei", "export.csv")
+	fw, _ := mw.CreateFormFile("datei", name)
 	_, _ = fw.Write([]byte(file))
 	_ = mw.Close()
 	req, _ := http.NewRequest(http.MethodPost, e.srv.URL+path, &b)

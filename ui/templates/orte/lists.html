@@ -1,18 +1,25 @@
 {{define "content"}}
 {{$d := .Data}}
-<div class="page-title"><h1>Orte{{if not $d.Own}} <span class="muted">· {{$d.Person}}</span>{{end}}</h1><a class="button secondary" href="/orte/zeitachse?person={{$d.PersonID}}">Zeitachse</a></div>
+<div class="page-title"><h1>Orte{{if not $d.Own}} <span class="muted">· {{$d.Person}}</span>{{end}}</h1></div>
+{{template "ortenav" $d.Tab}}
 {{if gt (len $d.People) 1}}<form class="filters" method="get" action="/orte">
-<label>Person<select name="person">{{range $d.People}}<option value="{{.ID}}"{{if .Current}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+<label>Reisen von<select name="person">{{range $d.People}}<option value="{{.ID}}"{{if .Current}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
 <button class="button secondary" type="submit">Anzeigen</button>
 </form>{{end}}
 {{if $d.Lists}}<div class="card"><ul class="list">
-{{range $d.Lists}}<li><a href="/orte/listen/{{.ID}}?person={{$d.PersonID}}">{{.Name}}</a><span class="muted small">{{if .DateFrom}}{{.DateFrom}}{{if .DateTo}} – {{.DateTo}}{{end}} · {{end}}{{.PlaceCount}} Orte</span></li>
+{{range $d.Lists}}<li><a href="/orte/reisen/{{.ID}}{{if not $d.Own}}?person={{$d.PersonID}}{{end}}">{{.Name}}</a><span class="muted small">{{template "range" .}} · {{.PlaceCount}} Orte{{if .TrackCount}} · Track{{end}}</span></li>
 {{end}}</ul></div>{{else}}<p class="muted">Keine Reisen.</p>{{end}}
-{{if $d.Own}}<details class="card"><summary>Standortverlauf importieren</summary>
-<form class="stack" method="post" action="/orte/import" enctype="multipart/form-data">
-<p class="muted small">JSON aus Google Takeout (Standortverlauf, Feld <code>locations</code>). Punkte, die schon da sind, werden übersprungen. Ein fehlerhafter Eintrag bricht den ganzen Import ab.</p>
-<label>Datei<input type="file" name="datei" accept="application/json,.json" required></label>
+{{if $d.Own}}<details class="card"{{if .Error}} open{{end}}><summary>Reise importieren (KML/KMZ)</summary>
+<form class="stack" method="post" action="/orte/reisen" enctype="multipart/form-data">
+<p class="muted small">Name, Beschreibung und Zeitraum kommen aus der Datei; was du hier einträgst, gilt vor. Ohne Zeitraum in Datei oder Formular wird nichts gespeichert. Orte (Point) brauchen einen Namen; Flächen werden nicht unterstützt.</p>
+<label>Datei<input type="file" name="datei" accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz" required></label>
+<label>Name<input type="text" name="name" maxlength="120" value="{{$d.Form.Name}}" placeholder="aus der Datei"></label>
+<div class="fields">
+<label>Von<input type="date" name="von" value="{{$d.Form.DateFrom}}"></label>
+<label>Bis<input type="date" name="bis" value="{{$d.Form.DateTo}}"></label>
+</div>
+<label>Beschreibung<textarea name="beschreibung" rows="3" placeholder="aus der Datei">{{$d.Form.Description}}</textarea></label>
 <div class="actions"><button class="button" type="submit">Importieren</button></div>
 </form></details>{{end}}
-<p class="muted small">Orte wird später grundlegend überarbeitet.</p>
+<p class="muted small">Reisen sehen alle mit Zugriff auf Orte. Verlauf und Karte siehst nur du.</p>
 {{end}}

@@ -17,7 +17,6 @@ import (
 	"github.com/tiliavir/allmend/internal/links"
 	"github.com/tiliavir/allmend/internal/migrations"
 	"github.com/tiliavir/allmend/internal/pages"
-	"github.com/tiliavir/allmend/internal/places"
 	"github.com/tiliavir/allmend/internal/session"
 	"github.com/tiliavir/allmend/internal/store"
 )
@@ -405,57 +404,3 @@ func TestCommuteConflict(t *testing.T) {
 }
 
 const ts0 = `'2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'`
-
-// TestPlaces reads places, lists and visits, including points of old KMZ
-// lines without a time that databases imported before 0.4.0 may hold.
-func TestPlaces(t *testing.T) {
-	ctx := context.Background()
-	s, _ := open(t)
-	d := s.DB()
-	_, err := d.ExecContext(ctx, `
-INSERT INTO accounts (id, email, is_admin, status, created_at, updated_at) VALUES ('admin', 'admin@example.org', 1, 'active', `+ts0+`);
-INSERT INTO places (id, owner_id, name, latitude, longitude, created_at, updated_at) VALUES ('p1', 'admin', 'Basel', 47.5596, 7.5886, `+ts0+`);
-INSERT INTO place_lists (id, owner_id, name, date_from, source_file, created_at, updated_at) VALUES ('l1', 'admin', 'Rhein', '2024-05-01', 'trip.json', `+ts0+`);
-INSERT INTO place_list_places (list_id, place_id) VALUES ('l1', 'p1');
-INSERT INTO place_visits (id, owner_id, latitude, longitude, at, seq, source_file) VALUES
-	('v1', 'admin', 47.5, 7.6, '2024-05-03T10:00:00.000Z', NULL, 'trip.json'),
-	('v2', 'admin', 46.2, 7.8, NULL, 1, 'weg.kmz'),
-	('v3', 'admin', 46.1, 7.8, NULL, 0, 'weg.kmz');`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	admin, _ := s.Accounts().ByEmail(ctx, "admin@example.org")
-	list, ps, err := s.Places().List(ctx, admin.ID, "l1")
-	if err != nil || len(ps) != 1 || ps[0].Name != "Basel" || list.SourceFile != "trip.json" {
-		t.Fatalf("list %+v %+v %v", list, ps, err)
-	}
-	vs, _ := s.Places().VisitsBySource(ctx, admin.ID, "trip.json")
-	if len(vs) != 1 || vs[0].Timestamp.Hour() != 10 {
-		t.Fatalf("visits %+v", vs)
-	}
-	line, _ := s.Places().VisitsBySource(ctx, admin.ID, "weg.kmz")
-	if len(line) != 2 || line[0].ID != "v3" || line[1].Seq != 1 || !line[1].Timestamp.IsZero() {
-		t.Fatalf("untimed track %+v", line)
-	}
-	if days, _ := s.Places().VisitDays(ctx, admin.ID); len(days) != 1 || days[0] != "2024-05-03" {
-		t.Errorf("visit days %v", days)
-	}
-	day, _ := time.Parse(time.DateOnly, "2024-05-03")
-	if on, _ := s.Places().VisitsOn(ctx, admin.ID, day, day.AddDate(0, 0, 1)); len(on) != 1 {
-		t.Errorf("visits on day: %d", len(on))
-	}
-	// Re-import of the same point is skipped.
-	n, err := s.Places().InsertVisits(ctx, []places.Visit{{ID: "x", OwnerID: admin.ID, Latitude: 47.5, Longitude: 7.6, Timestamp: vs[0].Timestamp, SourceFile: "trip.json"}})
-	if err != nil || n != 0 {
-		t.Errorf("duplicate visit: %d %v", n, err)
-	}
-	// An existing id at another time is an error, not skipped.
-	if _, err := s.Places().InsertVisits(ctx, []places.Visit{{ID: "x", OwnerID: admin.ID, Latitude: 47.5, Longitude: 7.6, Timestamp: vs[0].Timestamp.Add(time.Hour), SourceFile: "trip.json"},
-		{ID: "x", OwnerID: admin.ID, Latitude: 47.5, Longitude: 7.6, Timestamp: vs[0].Timestamp.Add(2 * time.Hour), SourceFile: "trip.json"}}); err == nil {
-		t.Error("duplicate id accepted")
-	}
-	// New points always have a time.
-	if _, err := s.Places().InsertVisits(ctx, []places.Visit{{ID: "y", OwnerID: admin.ID, Latitude: 47.5, Longitude: 7.6, SourceFile: "weg.kmz"}}); err == nil {
-		t.Error("untimed visit accepted")
-	}
-}

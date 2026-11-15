@@ -1,16 +1,25 @@
 {{define "content"}}
 {{$d := .Data}}
-<div class="page-title"><h1>Zeitachse{{if not $d.Own}} <span class="muted">· {{$d.Person}}</span>{{end}}</h1><a class="button secondary" href="/orte?person={{$d.PersonID}}">Reisen</a></div>
-{{if not $d.Days}}<p class="muted">Kein Standortverlauf vorhanden.</p>{{else}}
-<form class="filters" method="get" action="/orte/zeitachse">
-<input type="hidden" name="person" value="{{$d.PersonID}}">
-<label>Tag<input type="date" name="tag" value="{{$d.Day}}" min="{{index $d.Days 0}}" max="{{index $d.Days (sub (len $d.Days) 1)}}"></label>
+<div class="page-title"><h1>Verlauf</h1></div>
+{{template "ortenav" $d.Tab}}
+{{if not $d.Days}}<p class="muted">Noch kein Standortverlauf.</p>{{else}}
+<form class="filters" method="get" action="/orte/verlauf">
+<label>Tag (Ortszeit)<input type="date" name="tag" value="{{$d.Day}}" min="{{index $d.Days 0}}" max="{{index $d.Days (sub (len $d.Days) 1)}}"></label>
 <button class="button secondary" type="submit">Anzeigen</button>
-{{if $d.Prev}}<a class="button secondary" href="/orte/zeitachse?person={{$d.PersonID}}&amp;tag={{$d.Prev}}">← {{$d.Prev}}</a>{{end}}
-{{if $d.Next}}<a class="button secondary" href="/orte/zeitachse?person={{$d.PersonID}}&amp;tag={{$d.Next}}">{{$d.Next}} →</a>{{end}}
+{{if $d.Prev}}<a class="button secondary" href="/orte/verlauf?tag={{$d.Prev}}" aria-label="Vorheriger Tag mit Daten">← {{dateDE $d.Prev}}</a>{{end}}
+{{if $d.Next}}<a class="button secondary" href="/orte/verlauf?tag={{$d.Next}}" aria-label="Nächster Tag mit Daten">{{dateDE $d.Next}} →</a>{{end}}
 </form>
-<p class="muted small">{{$d.Visits}} Punkte am {{$d.Day}} (UTC).</p>
-<div class="card"><div class="map" id="karte" role="img" aria-label="Weg am {{$d.Day}}"></div></div>
+<p class="muted small">{{day $d.Day}} · {{$d.Points}} Punkte · {{len $d.Stays}} Aufenthalte</p>
+<div class="card"><div class="map" id="karte" role="img" aria-label="Weg am {{dateDE $d.Day}}"></div></div>
 <script type="application/json" id="karte-daten">{{$d.Map}}</script>
+{{if $d.Stays}}<div class="card"><ul class="list">{{range $d.Stays}}<li><span>{{if .Label}}{{.Label}}{{else}}Aufenthalt <span class="muted small">{{.Where}}</span>{{end}}</span><span class="muted">{{.From}} – {{.To}}</span></li>
+{{end}}</ul></div>{{end}}
 {{end}}
+<details class="card"><summary>Timeline.json importieren</summary>
+<form class="stack" method="post" action="/orte/verlauf" enctype="multipart/form-data">
+<p class="muted small">Google Maps auf dem Handy › Einstellungen › Standort › Zeitachse › Zeitachsendaten exportieren. Übernommen wird nur, was neuer ist als dein letzter Stand{{if $d.Last}} (Import vom {{$d.Last.At.Format "02.01.2006"}}){{end}}; Älteres wird übersprungen. Ein fehlerhafter Eintrag bricht den ganzen Import ab.</p>
+<label>Datei<input type="file" name="datei" accept="application/json,.json" required></label>
+<div class="actions"><button class="button" type="submit">Importieren</button></div>
+</form></details>
+{{if $d.Last}}<p class="small"><a href="/orte/verlauf/importe">Importe verwalten</a></p>{{end}}
 {{end}}
