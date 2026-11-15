@@ -40,15 +40,51 @@ func TestParseTimeline(t *testing.T) {
 		t.Errorf("first %v", tl.First)
 	}
 	for _, bad := range []string{
-		`[]`, `{}`, `{"semanticSegments": {}}`,
+		`[]`, `{}`, `"x"`, `{"semanticSegments": {}}`, `{"semanticSegments": []}`,
 		`{"semanticSegments": [{"startTime": "2026-11-13T07:00:00Z", "endTime": "2026-11-13T08:00:00Z"}]}`,
 		`{"semanticSegments": [{"startTime": "2026-11-13T07:00:00Z", "endTime": "2026-11-13T06:00:00Z", "activity": {}}]}`,
 		`{"semanticSegments": [{"startTime": "gestern", "endTime": "2026-11-13T08:00:00Z", "activity": {}}]}`,
-		`{"semanticSegments": [{"startTime": "2026-11-13T07:00:00Z", "endTime": "2026-11-13T08:00:00Z", "timelinePath": [{"point": "geo:47.1,7.5", "time": "2026-11-13T07:00:00Z"}]}]}`,
+		`{"semanticSegments": [{"startTime": "2026-11-13T07:00:00Z", "endTime": "2026-11-13T08:00:00Z", "timelinePath": [{"point": "geo:47.1;7.5", "time": "2026-11-13T07:00:00Z"}]}]}`,
 		`{"semanticSegments": [{"startTime": "2026-11-13T07:00:00Z", "endTime": "2026-11-13T08:00:00Z", "timelinePath": [{"point": "95.0°, 7.5°", "time": "2026-11-13T07:00:00Z"}]}]}`,
-		`{"semanticSegments": [{"startTime": "2026-11-13T07:00:00Z", "endTime": "2026-11-13T08:00:00Z", "visit": {"hierarchyLevel": 0, "topCandidate": {"semanticType": "home", "placeLocation": {"latLng": "47°, 7°"}}}}]}`,
+		`{"semanticSegments": [{"startTime": "2026-11-13T07:00:00Z", "endTime": "2026-11-13T08:00:00Z", "visit": {"hierarchyLevel": 0, "topCandidate": {"semanticType": "HOME-1", "placeLocation": {"latLng": "47°, 7°"}}}}]}`,
 		`{"semanticSegments": [{"startTime": "2026-11-13T07:00:00Z", "endTime": "2026-11-13T08:00:00Z", "visit": {"topCandidate": {"semanticType": "HOME", "placeLocation": {"latLng": "47°, 7°"}}}}]}`,
 		`{"semanticSegments": [{"startTime": "2026-11-13T07:00:00Z", "endTime": "2026-11-13T08:00:00Z", "visit": {}, "activity": {}}]}`,
+	} {
+		if _, err := ParseTimeline(strings.NewReader(bad)); err == nil {
+			t.Errorf("accepted %s", bad)
+		}
+	}
+}
+
+// timelineArray is the bare-array shape (newer exports, iOS): geo: URIs,
+// numbers as strings, path times as minute offsets.
+const timelineArray = `[
+ {"endTime": "2026-11-13T07:42:00.000+01:00", "startTime": "2026-11-13T07:00:00.000+01:00",
+  "visit": {"hierarchyLevel": "0", "probability": "0.9", "topCandidate": {"probability": "0.8", "semanticType": "Home", "placeID": "x", "placeLocation": "geo:47.559600,7.588600"}}},
+ {"endTime": "2026-11-13T08:15:00.000+01:00", "startTime": "2026-11-13T07:42:00.000+01:00",
+  "activity": {"start": "geo:47.5596,7.5886", "end": "geo:47.56,7.6", "topCandidate": {"type": "cycling", "probability": "0.9"}, "distanceMeters": "1234"}},
+ {"endTime": "2026-11-13T09:00:00.000+01:00", "startTime": "2026-11-13T07:00:00.000+01:00",
+  "timelinePath": [{"point": "geo:47.5596,7.5886", "durationMinutesOffsetFromStartTime": "40"}, {"point": "geo:47.56,7.6", "durationMinutesOffsetFromStartTime": "70"}]},
+ {"endTime": "2026-11-13T09:00:00.000+01:00", "startTime": "2026-11-13T08:00:00.000+01:00", "timelineMemory": {"duration": {"nights": "0"}}}
+]`
+
+func TestParseTimelineArray(t *testing.T) {
+	tl, err := ParseTimeline(strings.NewReader(timelineArray))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tl.Stays) != 1 || tl.Stays[0].SemanticType != "HOME" || tl.Stays[0].Label() != "Zuhause" || tl.Stays[0].Latitude != 47.5596 {
+		t.Errorf("stays %+v", tl.Stays)
+	}
+	if len(tl.Points) != 2 || !tl.Points[1].At.Equal(time.Date(2026, 11, 13, 7, 10, 0, 0, time.UTC)) || *tl.Points[1].Offset != 60 {
+		t.Errorf("points %+v", tl.Points)
+	}
+	for _, bad := range []string{
+		`[{"startTime": "2026-11-13T07:00:00Z", "endTime": "2026-11-13T08:00:00Z", "timelinePath": [{"point": "geo:47,7"}]}]`,
+		`[{"startTime": "2026-11-13T07:00:00Z", "endTime": "2026-11-13T08:00:00Z", "timelinePath": [{"point": "geo:47,7", "durationMinutesOffsetFromStartTime": "-5"}]}]`,
+		`[{"startTime": "2026-11-13T07:00:00Z", "endTime": "2026-11-13T08:00:00Z", "visit": {"hierarchyLevel": "x", "topCandidate": {"semanticType": "Home", "placeLocation": "geo:47,7"}}}]`,
+		`[{"startTime": "2026-11-13T07:00:00Z", "endTime": "2026-11-13T08:00:00Z", "visit": {"hierarchyLevel": "0", "topCandidate": {"semanticType": "Home", "placeLocation": 5}}}]`,
+		`[{"startTime": "2026-11-13T07:00:00Z", "endTime": "2026-11-13T08:00:00Z", "visit": {"hierarchyLevel": "0", "topCandidate": {"semanticType": "Home!", "placeLocation": "geo:47,7"}}}]`,
 	} {
 		if _, err := ParseTimeline(strings.NewReader(bad)); err == nil {
 			t.Errorf("accepted %s", bad)

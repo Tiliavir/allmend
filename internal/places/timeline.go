@@ -7,28 +7,44 @@ import (
 	"io"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
 // Timeline is what ParseTimeline takes from a Timeline.json.
 type Timeline struct {
-	Points []Point
-	Stays  []Stay
-	First  time.Time // earliest time in the file (zero if it has none)
+	Points   []Point
+	Stays    []Stay
+	First    time.Time // earliest time in the file (zero if it has none)
+	segments int
 }
 
 // ParseTimeline reads the Timeline.json that Google Maps exports on the
-// phone ({"semanticSegments":[…], "rawSignals":[…], …}). It takes the
-// timelinePath points and the top-level visits (hierarchyLevel 0); activities
-// and timeline memories are skipped, as are rawSignals and
+// phone. Two shapes exist: an object {"semanticSegments":[…], "rawSignals":
+// […], …} with "47.5°, 7.5°" coordinates, and a bare array of segments with
+// "geo:47.5,7.5" coordinates (newer exports, iOS). It takes the
+// timelinePath points and the top-level visits (hierarchyLevel 0);
+// activities and timeline memories are skipped, as are rawSignals and
 // userLocationProfile. The file is read as a stream. A segment of unknown
 // kind, a missing field or a bad value aborts with the segment's number.
 func ParseTimeline(r io.Reader) (Timeline, error) {
 	var t Timeline
 	dec := json.NewDecoder(r)
-	if tok, err := dec.Token(); err != nil || tok != json.Delim('{') {
-		return t, errors.New("Datei ist kein JSON-Objekt (Timeline.json erwartet)")
+	tok, err := dec.Token()
+	if err != nil {
+		return t, errors.New("Datei ist kein JSON (Timeline.json erwartet)")
 	}
+	switch tok {
+	case json.Delim('['):
+		if err := t.readSegments(dec); err != nil {
+			return t, err
+		}
+		return t, t.nonEmpty()
+	case json.Delim('{'):
+	default:
+		return t, errors.New("Datei ist weder JSON-Objekt noch -Liste (Timeline.json erwartet)")
+	}
+	var keys []string
 	seen := false
 	for dec.More() {
 		tok, err := dec.Token()
@@ -37,6 +53,7 @@ func ParseTimeline(r io.Reader) (Timeline, error) {
 		}
 		key, _ := tok.(string)
 		if key != "semanticSegments" {
+			keys = append(keys, key)
 			if err := skipValue(dec); err != nil {
 				return t, fmt.Errorf("Datei ist kein gültiges JSON: %w", err)
 			}
@@ -46,23 +63,39 @@ func ParseTimeline(r io.Reader) (Timeline, error) {
 		if tok, err := dec.Token(); err != nil || tok != json.Delim('[') {
 			return t, errors.New(`"semanticSegments" ist keine Liste`)
 		}
-		for i := 1; dec.More(); i++ {
-			var s rawSegment
-			if err := dec.Decode(&s); err != nil {
-				return t, fmt.Errorf("Abschnitt %d: kein gültiges JSON: %w", i, err)
-			}
-			if err := s.add(&t); err != nil {
-				return t, fmt.Errorf("Abschnitt %d: %w", i, err)
-			}
-		}
-		if _, err := dec.Token(); err != nil {
-			return t, fmt.Errorf("Datei ist kein gültiges JSON: %w", err)
+		if err := t.readSegments(dec); err != nil {
+			return t, err
 		}
 	}
 	if !seen {
-		return t, errors.New(`Datei enthält kein Feld "semanticSegments" – ist es eine Timeline.json vom Handy?`)
+		return t, fmt.Errorf(`Datei enthält kein Feld "semanticSegments", sondern %q – ist es eine Timeline.json vom Handy?`, keys)
 	}
-	return t, nil
+	return t, t.nonEmpty()
+}
+
+func (t *Timeline) nonEmpty() error {
+	if t.segments == 0 {
+		return errors.New("Datei enthält keine Einträge")
+	}
+	return nil
+}
+
+// readSegments reads a list of segments up to and including its closing "]".
+func (t *Timeline) readSegments(dec *json.Decoder) error {
+	for i := 1; dec.More(); i++ {
+		t.segments++
+		var s rawSegment
+		if err := dec.Decode(&s); err != nil {
+			return fmt.Errorf("Abschnitt %d: kein gültiges JSON: %w", i, err)
+		}
+		if err := s.add(t); err != nil {
+			return fmt.Errorf("Abschnitt %d: %w", i, err)
+		}
+	}
+	if _, err := dec.Token(); err != nil {
+		return fmt.Errorf("Datei ist kein gültiges JSON: %w", err)
+	}
+	return nil
 }
 
 // skipValue consumes one JSON value without keeping it.
@@ -89,16 +122,15 @@ type rawSegment struct {
 	StartTime    string `json:"startTime"`
 	EndTime      string `json:"endTime"`
 	TimelinePath *[]struct {
-		Point string `json:"point"`
-		Time  string `json:"time"`
+		Point  string          `json:"point"`
+		Time   string          `json:"time"`
+		Offset json.RawMessage `json:"durationMinutesOffsetFromStartTime"` // number or string
 	} `json:"timelinePath"`
 	Visit *struct {
-		HierarchyLevel *int `json:"hierarchyLevel"`
+		HierarchyLevel json.RawMessage `json:"hierarchyLevel"` // number or string
 		TopCandidate   *struct {
-			SemanticType  string `json:"semanticType"`
-			PlaceLocation *struct {
-				LatLng string `json:"latLng"`
-			} `json:"placeLocation"`
+			SemanticType  string          `json:"semanticType"`
+			PlaceLocation json.RawMessage `json:"placeLocation"` // {"latLng": "…"} or "geo:…"
 		} `json:"topCandidate"`
 	} `json:"visit"`
 	Activity       json.RawMessage `json:"activity"`
@@ -130,7 +162,7 @@ func (s rawSegment) add(t *Timeline) error {
 	switch {
 	case s.TimelinePath != nil:
 		for j, p := range *s.TimelinePath {
-			at, err := parseTime(p.Time, "time")
+			at, err := pathTime(start, p.Time, p.Offset)
 			if err != nil {
 				return fmt.Errorf("Punkt %d: %w", j+1, err)
 			}
@@ -144,26 +176,80 @@ func (s rawSegment) add(t *Timeline) error {
 		}
 	case s.Visit != nil:
 		v := s.Visit
-		if v.HierarchyLevel == nil || *v.HierarchyLevel < 0 {
-			return errors.New("visit ohne hierarchyLevel")
+		level, err := flexInt(v.HierarchyLevel)
+		if err != nil || level < 0 {
+			return errors.New("visit ohne gültiges hierarchyLevel")
 		}
-		if *v.HierarchyLevel > 0 {
+		if level > 0 {
 			return nil // a stay inside another one (e.g. a shop in a mall)
 		}
 		if v.TopCandidate == nil || v.TopCandidate.PlaceLocation == nil {
 			return errors.New("visit ohne topCandidate.placeLocation")
 		}
-		if !semanticRe.MatchString(v.TopCandidate.SemanticType) {
+		kind := semanticType(v.TopCandidate.SemanticType)
+		if !semanticRe.MatchString(kind) {
 			return fmt.Errorf("semanticType %q ungültig", v.TopCandidate.SemanticType)
 		}
-		lat, lon, err := parseLatLng(v.TopCandidate.PlaceLocation.LatLng)
+		loc, err := placeLocation(v.TopCandidate.PlaceLocation)
+		if err != nil {
+			return err
+		}
+		lat, lon, err := parseLatLng(loc)
 		if err != nil {
 			return err
 		}
 		t.Stays = append(t.Stays, Stay{Start: start.UTC(), End: end.UTC(), Offset: offsetMin(start), Day: localDay(start), EndDay: localDay(end.In(start.Location())),
-			Latitude: lat, Longitude: lon, SemanticType: v.TopCandidate.SemanticType})
+			Latitude: lat, Longitude: lon, SemanticType: kind})
 	}
 	return nil
+}
+
+// pathTime is a path point's own time, or the segment start plus
+// durationMinutesOffsetFromStartTime (the array shape has only that).
+func pathTime(start time.Time, at string, offset json.RawMessage) (time.Time, error) {
+	if at != "" {
+		return parseTime(at, "time")
+	}
+	if offset == nil {
+		return time.Time{}, errors.New("time fehlt")
+	}
+	m, err := flexInt(offset)
+	if err != nil || m < 0 {
+		return time.Time{}, fmt.Errorf("durationMinutesOffsetFromStartTime %s ungültig", offset)
+	}
+	return start.Add(time.Duration(m) * time.Minute), nil
+}
+
+// flexInt reads a whole number given as JSON number or string ("0").
+func flexInt(raw json.RawMessage) (int, error) {
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return strconv.Atoi(s)
+	}
+	var n int
+	err := json.Unmarshal(raw, &n)
+	return n, err
+}
+
+// placeLocation reads {"latLng": "…"} or a plain string.
+func placeLocation(raw json.RawMessage) (string, error) {
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s, nil
+	}
+	var o struct {
+		LatLng string `json:"latLng"`
+	}
+	if err := json.Unmarshal(raw, &o); err != nil || o.LatLng == "" {
+		return "", errors.New("placeLocation ungültig")
+	}
+	return o.LatLng, nil
+}
+
+// semanticType writes Google's kinds the same way in both shapes: "Home"
+// and "HOME", "Searched Address" and "SEARCHED_ADDRESS".
+func semanticType(s string) string {
+	return strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(s), " ", "_"))
 }
 
 func (t *Timeline) first(at time.Time) {
@@ -174,12 +260,16 @@ func (t *Timeline) first(at time.Time) {
 
 var (
 	latLngRe   = regexp.MustCompile(`^(-?\d{1,3}(?:\.\d+)?)°, ?(-?\d{1,3}(?:\.\d+)?)°$`)
+	geoRe      = regexp.MustCompile(`^geo:(-?\d{1,3}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)$`)
 	semanticRe = regexp.MustCompile(`^[A-Z][A-Z_]*$`)
 )
 
-// parseLatLng reads Google's "47.5596°, 7.5886°".
+// parseLatLng reads Google's "47.5596°, 7.5886°" or "geo:47.5596,7.5886".
 func parseLatLng(s string) (float64, float64, error) {
 	m := latLngRe.FindStringSubmatch(s)
+	if m == nil {
+		m = geoRe.FindStringSubmatch(s)
+	}
 	if m == nil {
 		return 0, 0, fmt.Errorf("Koordinaten %q ungültig", s)
 	}
