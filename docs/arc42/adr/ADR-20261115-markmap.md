@@ -1,6 +1,6 @@
 # ADR-20261115: Markmap mind maps on pages
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 Mermaid mindmaps lay out radially and get messy with many nodes; even the
