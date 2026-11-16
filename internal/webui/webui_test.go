@@ -19,9 +19,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -646,10 +648,10 @@ func TestMermaidCSPAndGzipAsset(t *testing.T) {
 		t.Error("plain page relaxed CSP or loads mermaid")
 	}
 	r, body = e.get(admin, "/seiten/diagramm")
-	if !strings.Contains(r.Header.Get("Content-Security-Policy"), "style-src 'self' 'unsafe-inline'") || !strings.Contains(r.Header.Get("Content-Security-Policy"), "script-src 'self';") || !strings.Contains(body, "mermaid-12.3.0.min.js") {
+	if !strings.Contains(r.Header.Get("Content-Security-Policy"), "style-src 'self' 'unsafe-inline'") || !strings.Contains(r.Header.Get("Content-Security-Policy"), "script-src 'self';") || !strings.Contains(body, "mermaid.min.js") {
 		t.Errorf("mermaid page: %s", r.Header.Get("Content-Security-Policy"))
 	}
-	req, _ := http.NewRequest(http.MethodGet, e.srv.URL+"/static/vendor/mermaid-12.3.0.min.js", nil)
+	req, _ := http.NewRequest(http.MethodGet, e.srv.URL+"/static/vendor/mermaid.min.js", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	resp, err := http.DefaultTransport.RoundTrip(req)
 	if err != nil {
@@ -664,46 +666,31 @@ func TestMermaidCSPAndGzipAsset(t *testing.T) {
 func TestMarkmapPage(t *testing.T) {
 	e := newEnv(t)
 	admin := e.loginAdmin()
-	e.post(admin, "/seiten", url.Values{"title": {"Ich"}, "body": {"```markmap\n# Ich\n- ~~Colygon~~\n- Helvetia\n```"}})
+	e.post(admin, "/seiten", url.Values{"title": {"Ich"}, "body": {"```markmap\n---\nmarkmap:\n  theme: cards\n---\n# Ich\n- ~~Colygon~~\n```"}})
 	r, body := e.get(admin, "/seiten/ich")
 	csp := r.Header.Get("Content-Security-Policy")
 	if !strings.Contains(csp, "style-src 'self' 'unsafe-inline'") || !strings.Contains(csp, "script-src 'self';") {
 		t.Errorf("csp: %s", csp)
 	}
-	for _, want := range []string{"d3-7.9.0.min.js", "markmap-view-0.18.13.js", "seiten.js", `<pre class="markmap" data-markmap=`} {
-		if !strings.Contains(body, want) {
-			t.Errorf("missing %q", want)
-		}
+	if !strings.Contains(body, "seiten.js") || !strings.Contains(body, "<pre class=\"markmap\">---\nmarkmap:\n  theme: cards") {
+		t.Errorf("page: %s", body)
 	}
-	if strings.Contains(body, "mermaid-12.3.0.min.js") {
+	if strings.Contains(body, "mermaid.min.js") {
 		t.Error("loads mermaid without a mermaid block")
 	}
-	for _, p := range []string{"/static/vendor/d3-7.9.0.min.js", "/static/vendor/markmap-view-0.18.13.js"} {
-		resp, err := http.Get(e.srv.URL + p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_ = resp.Body.Close()
-		if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/javascript") {
-			t.Errorf("%s: %d %v", p, resp.StatusCode, resp.Header)
-		}
+	// the bundle seiten.js imports must exist (tools/markmap/build.sh names it)
+	_, js := e.get(admin, "/static/seiten.js")
+	m := regexp.MustCompile(`import\("(/static/vendor/markmap[^"]*\.js)"\)`).FindStringSubmatch(js)
+	if m == nil {
+		t.Fatal("seiten.js imports no markmap bundle")
 	}
-	bad := "```markmap\n---\nmarkmap:\n  zoom: 2\n---\n# Ich\n```"
-	r = e.post(admin, "/seiten", url.Values{"title": {"Optionen"}, "body": {bad}})
-	if r.StatusCode != http.StatusUnprocessableEntity {
-		t.Errorf("unknown option on create: %d", r.StatusCode)
+	resp, err := http.Get(e.srv.URL + m[1])
+	if err != nil {
+		t.Fatal(err)
 	}
-	r = e.post(admin, "/seiten/ich/bearbeiten", url.Values{"base": {"1"}, "title": {"Ich"}, "body": {bad}})
-	if r.StatusCode != http.StatusUnprocessableEntity {
-		t.Errorf("unknown option on save: %d", r.StatusCode)
-	}
-	if _, body := e.get(admin, "/seiten/ich"); strings.Contains(body, "zoom") {
-		t.Error("invalid options stored")
-	}
-	good := "```markmap\n---\nmarkmap:\n  initialExpandLevel: -1\n---\n# Ich\n```"
-	e.post(admin, "/seiten/ich/bearbeiten", url.Values{"base": {"1"}, "title": {"Ich"}, "body": {good}})
-	if _, body := e.get(admin, "/seiten/ich"); !strings.Contains(body, `data-markmap-options="{&#34;initialExpandLevel&#34;:-1}"`) {
-		t.Errorf("options missing: %s", body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/javascript") {
+		t.Errorf("bundle: %d %v", resp.StatusCode, resp.Header)
 	}
 }
 
@@ -1074,8 +1061,9 @@ func TestAppName(t *testing.T) {
 	}
 }
 
-// Own static files keep their names across releases, so they must be
-// revalidated; a cached copy made a release's new seiten.js invisible.
+// Static files keep their names across releases (vendored libraries too,
+// ADR vendor-build), so they must be revalidated; a cached copy made a
+// release's new seiten.js invisible.
 func TestStaticCaching(t *testing.T) {
 	e := newEnv(t)
 	get := func(p, etag string) *http.Response {
@@ -1093,7 +1081,7 @@ func TestStaticCaching(t *testing.T) {
 		_ = resp.Body.Close()
 		return resp
 	}
-	for _, p := range []string{"/static/seiten.js", "/static/allmend.css"} {
+	for _, p := range []string{"/static/seiten.js", "/static/allmend.css", "/static/vendor/markmap.js", "/static/vendor/leaflet.css"} {
 		r := get(p, "")
 		tag := r.Header.Get("ETag")
 		if r.StatusCode != 200 || r.Header.Get("Cache-Control") != "no-cache" || tag == "" {
@@ -1106,7 +1094,14 @@ func TestStaticCaching(t *testing.T) {
 			t.Errorf("%s with stale tag: %d", p, r.StatusCode)
 		}
 	}
-	if r := get("/static/vendor/d3-7.9.0.min.js", ""); r.Header.Get("Cache-Control") != "public, max-age=31536000, immutable" {
-		t.Errorf("vendor: %v", r.Header)
+}
+
+func TestCheckVendor(t *testing.T) {
+	if err := webui.CheckVendor(os.DirFS("../../ui/static")); err != nil {
+		t.Fatal(err)
+	}
+	err := webui.CheckVendor(fstest.MapFS{"vendor/leaflet.js.gz": {}})
+	if err == nil || !strings.Contains(err.Error(), "mermaid.min.js") || strings.Contains(err.Error(), "leaflet.js,") || !strings.Contains(err.Error(), "make vendor") {
+		t.Errorf("missing files: %v", err)
 	}
 }

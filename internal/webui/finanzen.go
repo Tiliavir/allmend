@@ -55,7 +55,7 @@ func (s *Server) finanzenRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /finanzen/verlauf/{jahr}/loeschen", m(s.finYearDelete))
 }
 
-var chartScripts = []Script{{Src: "/static/vendor/chart-4.6.1.umd.min.js"}, {Src: "/static/finanzen.js", Module: true}}
+var chartScripts = []Script{{Src: "/static/vendor/chart.umd.min.js"}, {Src: "/static/finanzen.js", Module: true}}
 
 func (s *Server) finPage(w http.ResponseWriter, r *http.Request, status int, name, title, errMsg string, d any, charts bool) {
 	p := Page{Title: title, Module: account.Finanzen, Error: errMsg, Data: d}

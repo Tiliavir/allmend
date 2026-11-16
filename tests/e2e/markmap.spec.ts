@@ -1,15 +1,33 @@
 import { expect, test } from "@playwright/test";
 import { Allmend, login } from "./allmend";
 
-// ADR markmap: a ```markmap block becomes an interactive mind map, under the
-// strict script CSP and without requests to other hosts.
+// ADR markmap: a ```markmap block is drawn by Markmap 1.x, which reads its
+// own front matter and magic comments, under the strict script CSP and
+// without requests to other hosts. Unusable options are listed under the map.
 const app = new Allmend(8193);
 
 test.afterAll(async () => app.dispose());
 
-const body = "```markmap\n# Ich\n\n## Arbeit\n\n- Helvetia\n  - seit 2018\n- ~~Colygon~~\n\n## Wohnen\n\n- Wollbach\n```\n";
+const body = [
+  "```markmap",
+  "---",
+  "markmap:",
+  "  theme: cards",
+  "  foldLevel: 2",
+  "  zoom: viel",
+  "---",
+  "# Ich",
+  "## Arbeit",
+  "- Helvetia",
+  "  - seit 2018",
+  "- ~~Colygon~~",
+  "## Wohnen <!-- markmap: fold -->",
+  "- Wollbach",
+  "```",
+  "",
+].join("\n");
 
-test("a markmap block is drawn as a mind map", async ({ page }) => {
+test("a markmap block is drawn with its options and magic comments", async ({ page }) => {
   await app.start();
   await login(page, app);
   const problems: string[] = [];
@@ -24,23 +42,13 @@ test("a markmap block is drawn as a mind map", async ({ page }) => {
 
   const map = page.locator("svg.markmap");
   await expect(map).toBeVisible();
-  // three levels open: "seit 2018" (level 4) waits behind a click on Helvetia
-  await expect(map.locator("g.markmap-node")).toHaveCount(6);
-  await expect(map.locator("del", { hasText: "Colygon" })).toBeVisible();
   await expect(page.locator("pre.markmap")).toHaveCount(0);
+  // foldLevel 2: Ich, Arbeit, Helvetia, Colygon, Wohnen; "seit 2018" folded
+  // by the level, "Wollbach" by the magic comment on Wohnen
+  await expect(map.getByText("Helvetia")).toBeVisible();
+  await expect(map.getByText("Wohnen")).toBeVisible();
+  await expect(map.getByText("seit 2018")).toHaveCount(0);
+  await expect(map.getByText("Wollbach")).toHaveCount(0);
+  await expect(page.locator(".markmap-warnings li")).toHaveText(["Markmap: `zoom` must be true or false"]);
   expect(problems).toEqual([]);
-});
-
-test("front matter opens all levels; an unknown option is refused", async ({ page }) => {
-  await app.start();
-  await login(page, app);
-  await page.goto(`${app.url}/seiten/neu`);
-  await page.getByRole("textbox", { name: "Titel", exact: true }).fill("Alle Ebenen");
-  await page.locator("textarea[name=body]").fill(body.replace("```markmap\n", "```markmap\n---\nmarkmap:\n  zoom: 1\n---\n"));
-  await page.getByRole("button", { name: "Speichern" }).click();
-  await expect(page.getByText("Unbekannte Einstellung „zoom“")).toBeVisible();
-
-  await page.locator("textarea[name=body]").fill(body.replace("```markmap\n", "```markmap\n---\nmarkmap:\n  initialExpandLevel: -1\n---\n"));
-  await page.getByRole("button", { name: "Speichern" }).click();
-  await expect(page.locator("svg.markmap g.markmap-node")).toHaveCount(7);
 });

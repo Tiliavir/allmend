@@ -2,8 +2,8 @@
 // tables, task lists, strikethrough and autolinks; raw HTML is dropped and
 // dangerous link schemes are neutralised (goldmark's safe mode). Task list
 // checkboxes become small forms so they can be ticked without JavaScript;
-// ```mermaid blocks are left for the client-side Mermaid renderer; ```markmap
-// blocks become a node tree (see markmap.go) for the client-side Markmap view.
+// ```mermaid and ```markmap blocks are left as text for their client-side
+// renderers (Markmap reads its own front matter and magic comments).
 package markdown
 
 import (
@@ -143,16 +143,8 @@ func (r *extras) code(w util.BufWriter, src []byte, n ast.Node, entering bool) (
 		return ast.WalkSkipChildren, nil
 	}
 	if lang == "markmap" {
-		tree, options, err := markmapTree(body.String())
-		if err != nil {
-			return ast.WalkStop, err
-		}
 		r.markmap = true
-		attrs := fmt.Sprintf(` data-markmap="%s"`, html.EscapeString(tree))
-		if options != "" {
-			attrs += fmt.Sprintf(` data-markmap-options="%s"`, html.EscapeString(options))
-		}
-		_, _ = fmt.Fprintf(w, "<pre class=\"markmap\"%s>%s</pre>\n", attrs, text)
+		_, _ = fmt.Fprintf(w, "<pre class=\"markmap\">%s</pre>\n", text)
 		return ast.WalkSkipChildren, nil
 	}
 	if lang != "" {

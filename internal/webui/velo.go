@@ -139,7 +139,7 @@ func (s *Server) veloOverview(w http.ResponseWriter, r *http.Request, a account.
 	// html/template marshals this to JSON inside the application/json block.
 	d.Chart = map[string]any{"year": year, "this": d.CumThis, "prev": d.CumPrev}
 	p := Page{Title: "Velo", Module: account.Velo, Data: d,
-		Scripts: []Script{{Src: "/static/vendor/chart-4.6.1.umd.min.js"}, {Src: "/static/velo.js", Module: true}}}
+		Scripts: []Script{{Src: "/static/vendor/chart.umd.min.js"}, {Src: "/static/velo.js", Module: true}}}
 	s.render(w, r, http.StatusOK, "velo/overview", p)
 }
 

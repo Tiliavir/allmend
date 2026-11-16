@@ -1,0 +1,15 @@
+{
+  "name": "allmend-vendor",
+  "private": true,
+  "type": "module",
+  "description": "Front-end libraries for ui/static/vendor, built by build.mjs (make vendor). Not used at runtime; versions are updated by Dependabot.",
+  "devDependencies": {
+    "@markmap/parse": "1.1.1",
+    "@markmap/view": "1.1.1",
+    "chart.js": "4.6.1",
+    "esbuild": "0.28.2",
+    "leaflet": "1.9.4",
+    "leaflet.heat": "0.2.0",
+    "mermaid": "12.3.0"
+  }
+}

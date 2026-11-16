@@ -218,7 +218,8 @@ pre.source { white-space: pre-wrap; margin: 0; font: 14px/1.5 ui-monospace, Menl
 .prose pre code { background: none; padding: 0; }
 .prose pre.mermaid { background: none; text-align: center; }
 .prose .markmap-box { margin: 0 0 0.9em; border: 1px solid var(--border); border-radius: 10px; }
-.markmap-box svg.markmap { display: block; width: 100%; height: 70vh; min-height: 320px; --markmap-font: 15px/20px var(--body); --markmap-text-color: var(--text); --markmap-a-color: var(--accent); }
+.markmap-box svg.markmap { display: block; width: 100%; height: 70vh; min-height: 320px; }
+.markmap-warnings { margin: 0; padding: 0.4em 0.8em 0.6em 1.8em; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85em; }
 .prose blockquote { border-left: 3px solid var(--border); padding-left: 14px; color: var(--muted); }
 .prose table { display: block; overflow-x: auto; }
 .prose img { max-width: 100%; }

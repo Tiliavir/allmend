@@ -7,3 +7,5 @@ node_modules/
 tests/
 test-results/
 .cache/
+ui/static/vendor/
+tools/vendor/node_modules/
