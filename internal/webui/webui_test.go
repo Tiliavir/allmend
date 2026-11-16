@@ -415,7 +415,7 @@ func TestPagesRender(t *testing.T) {
 	admin := e.loginAdmin()
 	e.post(admin, "/verwaltung/links", url.Values{"name": {"Haken"}, "url": {"https://haken.example"}, "icon": {"check"}, "public": {"1"}, "description": {"Aufgaben"}})
 	e.post(admin, "/verwaltung/konten", url.Values{"email": {"kim@example.org"}, "module": {"velo", "seiten", "schiffe"}})
-	e.post(admin, "/seiten", url.Values{"title": {"Netzwerk"}, "body": {"# Netz\n\n- [ ] Router\n- [x] NAS\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```mermaid\ngraph LR; A-->B\n```\n"}})
+	e.post(admin, "/seiten", url.Values{"title": {"Netzwerk"}, "body": {"# Netz\n\n- [ ] Router\n- [x] NAS\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```mermaid\ngraph LR; A-->B\n```\n\n```markmap\n# Netz\n- ~~Router~~\n- [x] Drucker\n```\n"}})
 	e.post(admin, "/arbeitswege", awForm(2026, map[string]string{"workdays_0": "20", "car_train_0": "13", "ho_0": "7"}))
 	e.post(admin, "/velo/velos", url.Values{"name": {"Gravel"}, "purchase": {"2500"}, "color": {"#5c7a3e"}})
 	bikes, _ := e.st.Velo().Bikes(context.Background(), adminID(e))
@@ -658,6 +658,47 @@ func TestMermaidCSPAndGzipAsset(t *testing.T) {
 	_ = resp.Body.Close()
 	if resp.StatusCode != 200 || resp.Header.Get("Content-Encoding") != "gzip" || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/javascript") {
 		t.Errorf("asset: %d %v", resp.StatusCode, resp.Header)
+	}
+}
+
+func TestMarkmapPage(t *testing.T) {
+	e := newEnv(t)
+	admin := e.loginAdmin()
+	e.post(admin, "/seiten", url.Values{"title": {"Ich"}, "body": {"```markmap\n# Ich\n- ~~Colygon~~\n- Helvetia\n```"}})
+	r, body := e.get(admin, "/seiten/ich")
+	csp := r.Header.Get("Content-Security-Policy")
+	if !strings.Contains(csp, "style-src 'self' 'unsafe-inline'") || !strings.Contains(csp, "script-src 'self';") {
+		t.Errorf("csp: %s", csp)
+	}
+	for _, want := range []string{"d3-7.9.0.min.js", "markmap-view-0.18.13.js", "seiten.js", `<pre class="markmap" data-markmap=`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(body, "mermaid-12.3.0.min.js") {
+		t.Error("loads mermaid without a mermaid block")
+	}
+	for _, p := range []string{"/static/vendor/d3-7.9.0.min.js", "/static/vendor/markmap-view-0.18.13.js"} {
+		resp, err := http.Get(e.srv.URL + p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/javascript") {
+			t.Errorf("%s: %d %v", p, resp.StatusCode, resp.Header)
+		}
+	}
+	fm := "```markmap\n---\nmarkmap:\n  colorFreezeLevel: 2\n---\n# Ich\n```"
+	r = e.post(admin, "/seiten", url.Values{"title": {"Optionen"}, "body": {fm}})
+	if r.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("front matter on create: %d", r.StatusCode)
+	}
+	r = e.post(admin, "/seiten/ich/bearbeiten", url.Values{"base": {"1"}, "title": {"Ich"}, "body": {fm}})
+	if r.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("front matter on save: %d", r.StatusCode)
+	}
+	if _, body := e.get(admin, "/seiten/ich"); strings.Contains(body, "colorFreezeLevel") {
+		t.Error("front matter stored")
 	}
 }
 

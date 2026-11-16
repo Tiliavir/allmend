@@ -2,7 +2,8 @@
 // tables, task lists, strikethrough and autolinks; raw HTML is dropped and
 // dangerous link schemes are neutralised (goldmark's safe mode). Task list
 // checkboxes become small forms so they can be ticked without JavaScript;
-// ```mermaid blocks are left for the client-side Mermaid renderer.
+// ```mermaid blocks are left for the client-side Mermaid renderer; ```markmap
+// blocks become a node tree (see markmap.go) for the client-side Markmap view.
 package markdown
 
 import (
@@ -32,6 +33,7 @@ type Tasks struct {
 type Result struct {
 	HTML       template.HTML
 	HasMermaid bool
+	HasMarkmap bool
 }
 
 // Render converts Markdown to HTML.
@@ -50,13 +52,14 @@ func Render(src string, tasks Tasks) (Result, error) {
 	if err := md.Convert(source, &buf); err != nil {
 		return Result{}, fmt.Errorf("markdown.Render: %w", err)
 	}
-	return Result{HTML: template.HTML(buf.String()), HasMermaid: r.mermaid}, nil //nolint:gosec // goldmark safe mode: raw HTML omitted, URLs filtered
+	return Result{HTML: template.HTML(buf.String()), HasMermaid: r.mermaid, HasMarkmap: r.markmap}, nil //nolint:gosec // goldmark safe mode: raw HTML omitted, URLs filtered
 }
 
 type extras struct {
 	source  []byte
 	tasks   Tasks
 	mermaid bool
+	markmap bool
 }
 
 func (r *extras) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
@@ -137,6 +140,15 @@ func (r *extras) code(w util.BufWriter, src []byte, n ast.Node, entering bool) (
 	if lang == "mermaid" {
 		r.mermaid = true
 		_, _ = fmt.Fprintf(w, "<pre class=\"mermaid\">%s</pre>\n", text)
+		return ast.WalkSkipChildren, nil
+	}
+	if lang == "markmap" {
+		tree, err := markmapTree(body.String())
+		if err != nil {
+			return ast.WalkStop, err
+		}
+		r.markmap = true
+		_, _ = fmt.Fprintf(w, "<pre class=\"markmap\" data-markmap=\"%s\">%s</pre>\n", html.EscapeString(tree), text)
 		return ast.WalkSkipChildren, nil
 	}
 	if lang != "" {

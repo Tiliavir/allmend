@@ -217,6 +217,8 @@ pre.source { white-space: pre-wrap; margin: 0; font: 14px/1.5 ui-monospace, Menl
 .prose pre { background: var(--bg); padding: 12px 14px; border-radius: 10px; overflow-x: auto; }
 .prose pre code { background: none; padding: 0; }
 .prose pre.mermaid { background: none; text-align: center; }
+.prose .markmap-box { margin: 0 0 0.9em; border: 1px solid var(--border); border-radius: 10px; }
+.markmap-box svg.markmap { display: block; width: 100%; height: 70vh; min-height: 320px; --markmap-font: 15px/20px var(--body); --markmap-text-color: var(--text); --markmap-a-color: var(--accent); }
 .prose blockquote { border-left: 3px solid var(--border); padding-left: 14px; color: var(--muted); }
 .prose table { display: block; overflow-x: auto; }
 .prose img { max-width: 100%; }
