@@ -3,8 +3,8 @@ package markdown
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/yuin/goldmark"
@@ -13,10 +13,73 @@ import (
 	"github.com/yuin/goldmark/text"
 )
 
-// ErrMarkmap is a ```markmap block that starts with front matter (---):
-// Markmap options are not supported, so the block is rejected rather than
-// drawn with the options shown as nodes.
-var ErrMarkmap = errors.New("markmap front matter not supported")
+// MarkmapError is a ```markmap block the page cannot show; Reason is German
+// for the edit form.
+type MarkmapError struct{ Reason string }
+
+func (e *MarkmapError) Error() string { return "markmap: " + e.Reason }
+
+// markmapOptions are the Markmap options a block may set in its front matter,
+// in Markmap's own format:
+//
+//	---
+//	markmap:
+//	  initialExpandLevel: -1
+//	---
+//
+// Each is an integer with its allowed minimum; anything else is an error.
+var markmapOptions = map[string]int{
+	"initialExpandLevel": -1, // -1: all levels open
+	"colorFreezeLevel":   0,
+	"maxWidth":           0, // 0: no limit
+}
+
+// splitFrontMatter returns the options of a block (JSON, "" without front
+// matter) and the Markdown after it.
+func splitFrontMatter(src string) (string, string, error) {
+	lines := strings.Split(strings.TrimLeft(src, "\n"), "\n")
+	if strings.TrimSpace(lines[0]) != "---" {
+		return "", src, nil
+	}
+	end := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			end = i
+			break
+		}
+	}
+	if end < 0 {
+		return "", "", &MarkmapError{"Die Einstellungen am Anfang des Blocks werden nicht mit --- abgeschlossen."}
+	}
+	if end < 3 || strings.TrimSpace(lines[1]) != "markmap:" {
+		return "", "", &MarkmapError{"Die Einstellungen müssen mit „markmap:“ beginnen, darunter eingerückt z. B. „initialExpandLevel: -1“."}
+	}
+	opts := map[string]int{}
+	for _, line := range lines[2:end] {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), ":")
+		if !ok || !strings.HasPrefix(line, " ") {
+			return "", "", &MarkmapError{fmt.Sprintf("Unerwartete Zeile in den Einstellungen: „%s“.", strings.TrimSpace(line))}
+		}
+		key = strings.TrimSpace(key)
+		low, known := markmapOptions[key]
+		if !known {
+			return "", "", &MarkmapError{fmt.Sprintf("Unbekannte Einstellung „%s“. Möglich: initialExpandLevel, colorFreezeLevel, maxWidth.", key)}
+		}
+		if _, dup := opts[key]; dup {
+			return "", "", &MarkmapError{fmt.Sprintf("Einstellung „%s“ steht doppelt da.", key)}
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || n < low || (key == "initialExpandLevel" && n == 0) {
+			return "", "", &MarkmapError{fmt.Sprintf("„%s“ braucht eine ganze Zahl ab %d (bei initialExpandLevel: -1 für alle Ebenen oder ab 1).", key, low)}
+		}
+		opts[key] = n
+	}
+	out, err := json.Marshal(opts)
+	if err != nil {
+		return "", "", fmt.Errorf("markmap options: %w", err)
+	}
+	return string(out), strings.Join(lines[end+1:], "\n"), nil
+}
 
 // mmNode is the node shape markmap-view expects: HTML content and children.
 type mmNode struct {
@@ -29,9 +92,11 @@ type mmNode struct {
 // indentation, any other block is a leaf under the heading before it. One
 // top-level node is the root; several get an empty root above them. Node
 // content is goldmark HTML in safe mode (raw HTML dropped, URLs filtered).
-func markmapTree(src string) (string, error) {
-	if strings.HasPrefix(strings.TrimLeft(src, "\n"), "---") {
-		return "", ErrMarkmap
+// Options from the front matter come back as JSON ("" without).
+func markmapTree(src string) (tree, options string, err error) {
+	options, src, err = splitFrontMatter(src)
+	if err != nil {
+		return "", "", err
 	}
 	source := []byte(src)
 	md := goldmark.New(goldmark.WithExtensions(
@@ -59,16 +124,16 @@ func markmapTree(src string) (string, error) {
 		b.add(stack[len(stack)-1].node, c)
 	}
 	if b.err != nil {
-		return "", b.err
+		return "", "", b.err
 	}
 	if len(root.Children) == 1 {
 		root = root.Children[0]
 	}
 	out, err := json.Marshal(root)
 	if err != nil {
-		return "", fmt.Errorf("markmap: %w", err)
+		return "", "", fmt.Errorf("markmap: %w", err)
 	}
-	return string(out), nil
+	return string(out), options, nil
 }
 
 type mmBuilder struct {

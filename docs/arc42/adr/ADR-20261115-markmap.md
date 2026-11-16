@@ -21,9 +21,15 @@ collapsible branches, real strikethrough, Markdown as the source. (stated)
   No autoloader: it would fetch from a CDN.
 - Like Mermaid, Markmap writes a `<style>` into its SVG, so these pages get
   the same relaxed `style-src` (`cspDiagram`); `script-src` stays `'self'`.
-- Fixed options, no front matter: groups keep their colour from level 2,
-  three levels open, nodes at most 300 px wide. A block that starts with
-  front matter (`---`) is rejected when the page is saved.
+- Defaults: groups keep their colour from level 2, three levels open,
+  nodes at most 300 px wide. A block may override them in front matter in
+  Markmap's own format (`markmap:` with indented keys), but only
+  `initialExpandLevel` (-1 = all, or ≥ 1), `colorFreezeLevel` (≥ 0) and
+  `maxWidth` (≥ 0), as integers. Anything else in the front matter (other
+  keys, other values, a missing closing `---`) is rejected when the page is
+  saved, with the reason in the form. The server checks the options and
+  passes them as `data-markmap-options`. (stated: per-page setting via front
+  matter, 2026-11-16)
 - Without JavaScript (and in Finanzen/Velo notes, which load no scripts)
   the Markdown source stays visible, as for Mermaid.
 

@@ -143,12 +143,16 @@ func (r *extras) code(w util.BufWriter, src []byte, n ast.Node, entering bool) (
 		return ast.WalkSkipChildren, nil
 	}
 	if lang == "markmap" {
-		tree, err := markmapTree(body.String())
+		tree, options, err := markmapTree(body.String())
 		if err != nil {
 			return ast.WalkStop, err
 		}
 		r.markmap = true
-		_, _ = fmt.Fprintf(w, "<pre class=\"markmap\" data-markmap=\"%s\">%s</pre>\n", html.EscapeString(tree), text)
+		attrs := fmt.Sprintf(` data-markmap="%s"`, html.EscapeString(tree))
+		if options != "" {
+			attrs += fmt.Sprintf(` data-markmap-options="%s"`, html.EscapeString(options))
+		}
+		_, _ = fmt.Fprintf(w, "<pre class=\"markmap\"%s>%s</pre>\n", attrs, text)
 		return ast.WalkSkipChildren, nil
 	}
 	if lang != "" {

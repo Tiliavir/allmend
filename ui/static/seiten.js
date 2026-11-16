@@ -9,15 +9,17 @@ if (mermaidBlocks.length > 0 && globalThis.mermaid) {
   await globalThis.mermaid.run({ nodes: mermaidBlocks });
 }
 
-// The server turned each block into a node tree (data-markmap, safe HTML).
-// Groups keep their colour; the first three levels are open, a click on a
-// circle opens or closes the branch.
+// The server turned each block into a node tree (data-markmap, safe HTML)
+// and checked its options (data-markmap-options, from the block's front
+// matter). Defaults: groups keep their colour, the first three levels are
+// open; a click on a circle opens or closes the branch.
 const markmapBlocks = document.querySelectorAll("pre.markmap[data-markmap]");
 if (markmapBlocks.length > 0 && globalThis.markmap) {
   const { Markmap, deriveOptions } = globalThis.markmap;
-  const options = deriveOptions({ colorFreezeLevel: 2, initialExpandLevel: 3, maxWidth: 300 });
+  const defaults = { colorFreezeLevel: 2, initialExpandLevel: 3, maxWidth: 300 };
   for (const pre of markmapBlocks) {
     const data = JSON.parse(pre.dataset.markmap);
+    const options = deriveOptions({ ...defaults, ...JSON.parse(pre.dataset.markmapOptions ?? "{}") });
     const box = document.createElement("div");
     box.className = dark ? "markmap-box markmap-dark" : "markmap-box";
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
