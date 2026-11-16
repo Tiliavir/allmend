@@ -4,23 +4,12 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
-## [0.14.0] - 2026-11-16
-
-### Changed
-
-- Front-end libraries (Chart.js, Leaflet, leaflet.heat, Mermaid, Markmap)
-  are no longer in git: `tools/vendor` pins them, `make vendor` (and the
-  Docker build) puts them into `ui/static/vendor`. Dependabot proposes
-  updates. File names no longer carry versions; static files are
-  revalidated by ETag. The server refuses to start if they are missing.
-
 ## [0.13.0] - 2026-11-16
 
 ### Changed
 
-- Seiten: ```` ```markmap ```` blocks are drawn by Markmap 1.x (bundled in
-  `ui/static/vendor`, built with `make vendor-markmap`). All Markmap options
-  work as documented, e.g. `theme` (`classic`, `cards`, `minimal`),
+- Seiten: ```` ```markmap ```` blocks are drawn by Markmap 1.x. All Markmap
+  options work as documented, e.g. `theme` (`classic`, `cards`, `minimal`),
   `layout` (`tree`, `two-sided`, `org-chart`), `foldLevel`, `colorScheme`,
   and magic comments (`<!-- markmap: fold -->`, `foldAll`). Invalid or
   unknown options no longer block saving; Markmap ignores them and they are
@@ -28,6 +17,11 @@ versions: [Semantic Versioning](https://semver.org/). Releasing is described in
   `colorFreezeLevel`, `maxWidth`) are not Markmap 1.x options**: use
   `foldLevel` (root = 0), `colorDepth`, `wrapWidth`. Default: all levels
   open, Markmap's colours.
+- Front-end libraries (Chart.js, Leaflet, leaflet.heat, Mermaid, Markmap)
+  are no longer in git: `tools/vendor` pins them, `make vendor` (and the
+  Docker build) puts them into `ui/static/vendor`. Dependabot proposes
+  updates. File names no longer carry versions; all static files are
+  revalidated by ETag. The server refuses to start if they are missing.
 
 ### Removed
 
