@@ -192,9 +192,10 @@ func (s *Server) seitenCreate(w http.ResponseWriter, r *http.Request, a account.
 // form, err for anything unexpected.
 func bodyError(body string) (string, error) {
 	_, err := markdown.Render(body, markdown.Tasks{})
+	var mm *markdown.MarkmapError
 	switch {
-	case errors.Is(err, markdown.ErrMarkmap):
-		return "Markmap: Einstellungen am Anfang des Blocks (---) werden nicht unterstützt. Bitte entfernen.", nil
+	case errors.As(err, &mm):
+		return "Markmap: " + mm.Reason, nil
 	case err != nil:
 		return "", err
 	}

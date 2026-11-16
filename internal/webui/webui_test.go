@@ -688,17 +688,22 @@ func TestMarkmapPage(t *testing.T) {
 			t.Errorf("%s: %d %v", p, resp.StatusCode, resp.Header)
 		}
 	}
-	fm := "```markmap\n---\nmarkmap:\n  colorFreezeLevel: 2\n---\n# Ich\n```"
-	r = e.post(admin, "/seiten", url.Values{"title": {"Optionen"}, "body": {fm}})
+	bad := "```markmap\n---\nmarkmap:\n  zoom: 2\n---\n# Ich\n```"
+	r = e.post(admin, "/seiten", url.Values{"title": {"Optionen"}, "body": {bad}})
 	if r.StatusCode != http.StatusUnprocessableEntity {
-		t.Errorf("front matter on create: %d", r.StatusCode)
+		t.Errorf("unknown option on create: %d", r.StatusCode)
 	}
-	r = e.post(admin, "/seiten/ich/bearbeiten", url.Values{"base": {"1"}, "title": {"Ich"}, "body": {fm}})
+	r = e.post(admin, "/seiten/ich/bearbeiten", url.Values{"base": {"1"}, "title": {"Ich"}, "body": {bad}})
 	if r.StatusCode != http.StatusUnprocessableEntity {
-		t.Errorf("front matter on save: %d", r.StatusCode)
+		t.Errorf("unknown option on save: %d", r.StatusCode)
 	}
-	if _, body := e.get(admin, "/seiten/ich"); strings.Contains(body, "colorFreezeLevel") {
-		t.Error("front matter stored")
+	if _, body := e.get(admin, "/seiten/ich"); strings.Contains(body, "zoom") {
+		t.Error("invalid options stored")
+	}
+	good := "```markmap\n---\nmarkmap:\n  initialExpandLevel: -1\n---\n# Ich\n```"
+	e.post(admin, "/seiten/ich/bearbeiten", url.Values{"base": {"1"}, "title": {"Ich"}, "body": {good}})
+	if _, body := e.get(admin, "/seiten/ich"); !strings.Contains(body, `data-markmap-options="{&#34;initialExpandLevel&#34;:-1}"`) {
+		t.Errorf("options missing: %s", body)
 	}
 }
 

@@ -57,7 +57,7 @@ func TestMarkmap(t *testing.T) {
 	if !r.HasMarkmap || r.HasMermaid {
 		t.Fatalf("flags: %+v", r)
 	}
-	tree, err := markmapTree("# Ich\n\n## Arbeit\n\n- ~~Colygon~~\n  - 17(?).03.2013 <b>x</b>\n- [Helvetia](https://example.org)\n\n## Wohnen\n\nWollbach\n")
+	tree, _, err := markmapTree("# Ich\n\n## Arbeit\n\n- ~~Colygon~~\n  - 17(?).03.2013 <b>x</b>\n- [Helvetia](https://example.org)\n\n## Wohnen\n\nWollbach\n")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,14 +76,41 @@ func TestMarkmap(t *testing.T) {
 }
 
 func TestMarkmapRoots(t *testing.T) {
-	tree, err := markmapTree("- A\n- B\n")
+	tree, _, err := markmapTree("- A\n- B\n")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if tree != `{"content":"","children":[{"content":"A"},{"content":"B"}]}` {
 		t.Errorf("two roots: %s", tree)
 	}
-	if _, err := Render("```markmap\n---\nmarkmap:\n  colorFreezeLevel: 2\n---\n# Ich\n```\n", Tasks{}); !errors.Is(err, ErrMarkmap) {
-		t.Errorf("front matter: %v", err)
+}
+
+func TestMarkmapOptions(t *testing.T) {
+	tree, opts, err := markmapTree("\n---\nmarkmap:\n  initialExpandLevel: -1\n  maxWidth: 0\n---\n# Ich\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts != `{"initialExpandLevel":-1,"maxWidth":0}` || tree != `{"content":"Ich"}` {
+		t.Errorf("opts %s tree %s", opts, tree)
+	}
+	r, err := Render("```markmap\n---\nmarkmap:\n  colorFreezeLevel: 1\n---\n# Ich\n```\n", Tasks{})
+	if err != nil || !strings.Contains(string(r.HTML), `data-markmap-options="{&#34;colorFreezeLevel&#34;:1}"`) {
+		t.Errorf("render: %v %s", err, r.HTML)
+	}
+	for _, bad := range []string{
+		"---\nmarkmap:\n  initialExpandLevel: -1\n# Ich\n",          // not closed
+		"---\ninitialExpandLevel: -1\n---\n# Ich\n",                 // no markmap:
+		"---\nmarkmap:\n---\n# Ich\n",                               // nothing set
+		"---\nmarkmap:\n  zoom: 1\n---\n# Ich\n",                    // unknown
+		"---\nmarkmap:\n  maxWidth: 1\n  maxWidth: 2\n---\n# Ich\n", // twice
+		"---\nmarkmap:\ninitialExpandLevel: 1\n---\n# Ich\n",        // not indented
+		"---\nmarkmap:\n  initialExpandLevel: 0\n---\n# Ich\n",
+		"---\nmarkmap:\n  initialExpandLevel: -2\n---\n# Ich\n",
+		"---\nmarkmap:\n  maxWidth: viel\n---\n# Ich\n",
+	} {
+		var mm *MarkmapError
+		if _, _, err := markmapTree(bad); !errors.As(err, &mm) || mm.Reason == "" {
+			t.Errorf("%q: %v", bad, err)
+		}
 	}
 }

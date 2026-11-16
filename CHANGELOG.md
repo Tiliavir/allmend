@@ -4,6 +4,24 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.12.0] - 2026-11-16
+
+### Added
+
+- Seiten: a ```` ```markmap ```` block can set Markmap options in front
+  matter, e.g. all levels open:
+
+  ```
+  ---
+  markmap:
+    initialExpandLevel: -1
+  ---
+  ```
+
+  Allowed: `initialExpandLevel` (-1 = all, or from 1), `colorFreezeLevel`,
+  `maxWidth` (integers from 0). Anything else is refused on save with the
+  reason.
+
 ## [0.11.0] - 2026-11-15
 
 ### Added

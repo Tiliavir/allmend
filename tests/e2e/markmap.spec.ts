@@ -30,3 +30,17 @@ test("a markmap block is drawn as a mind map", async ({ page }) => {
   await expect(page.locator("pre.markmap")).toHaveCount(0);
   expect(problems).toEqual([]);
 });
+
+test("front matter opens all levels; an unknown option is refused", async ({ page }) => {
+  await app.start();
+  await login(page, app);
+  await page.goto(`${app.url}/seiten/neu`);
+  await page.getByRole("textbox", { name: "Titel", exact: true }).fill("Alle Ebenen");
+  await page.locator("textarea[name=body]").fill(body.replace("```markmap\n", "```markmap\n---\nmarkmap:\n  zoom: 1\n---\n"));
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText("Unbekannte Einstellung „zoom“")).toBeVisible();
+
+  await page.locator("textarea[name=body]").fill(body.replace("```markmap\n", "```markmap\n---\nmarkmap:\n  initialExpandLevel: -1\n---\n"));
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.locator("svg.markmap g.markmap-node")).toHaveCount(7);
+});
