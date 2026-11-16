@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -664,46 +665,31 @@ func TestMermaidCSPAndGzipAsset(t *testing.T) {
 func TestMarkmapPage(t *testing.T) {
 	e := newEnv(t)
 	admin := e.loginAdmin()
-	e.post(admin, "/seiten", url.Values{"title": {"Ich"}, "body": {"```markmap\n# Ich\n- ~~Colygon~~\n- Helvetia\n```"}})
+	e.post(admin, "/seiten", url.Values{"title": {"Ich"}, "body": {"```markmap\n---\nmarkmap:\n  theme: cards\n---\n# Ich\n- ~~Colygon~~\n```"}})
 	r, body := e.get(admin, "/seiten/ich")
 	csp := r.Header.Get("Content-Security-Policy")
 	if !strings.Contains(csp, "style-src 'self' 'unsafe-inline'") || !strings.Contains(csp, "script-src 'self';") {
 		t.Errorf("csp: %s", csp)
 	}
-	for _, want := range []string{"d3-7.9.0.min.js", "markmap-view-0.18.13.js", "seiten.js", `<pre class="markmap" data-markmap=`} {
-		if !strings.Contains(body, want) {
-			t.Errorf("missing %q", want)
-		}
+	if !strings.Contains(body, "seiten.js") || !strings.Contains(body, "<pre class=\"markmap\">---\nmarkmap:\n  theme: cards") {
+		t.Errorf("page: %s", body)
 	}
 	if strings.Contains(body, "mermaid-12.3.0.min.js") {
 		t.Error("loads mermaid without a mermaid block")
 	}
-	for _, p := range []string{"/static/vendor/d3-7.9.0.min.js", "/static/vendor/markmap-view-0.18.13.js"} {
-		resp, err := http.Get(e.srv.URL + p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_ = resp.Body.Close()
-		if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/javascript") {
-			t.Errorf("%s: %d %v", p, resp.StatusCode, resp.Header)
-		}
+	// the bundle seiten.js imports must exist (tools/markmap/build.sh names it)
+	_, js := e.get(admin, "/static/seiten.js")
+	m := regexp.MustCompile(`import\("(/static/vendor/markmap-[0-9.]+\.js)"\)`).FindStringSubmatch(js)
+	if m == nil {
+		t.Fatal("seiten.js imports no markmap bundle")
 	}
-	bad := "```markmap\n---\nmarkmap:\n  zoom: 2\n---\n# Ich\n```"
-	r = e.post(admin, "/seiten", url.Values{"title": {"Optionen"}, "body": {bad}})
-	if r.StatusCode != http.StatusUnprocessableEntity {
-		t.Errorf("unknown option on create: %d", r.StatusCode)
+	resp, err := http.Get(e.srv.URL + m[1])
+	if err != nil {
+		t.Fatal(err)
 	}
-	r = e.post(admin, "/seiten/ich/bearbeiten", url.Values{"base": {"1"}, "title": {"Ich"}, "body": {bad}})
-	if r.StatusCode != http.StatusUnprocessableEntity {
-		t.Errorf("unknown option on save: %d", r.StatusCode)
-	}
-	if _, body := e.get(admin, "/seiten/ich"); strings.Contains(body, "zoom") {
-		t.Error("invalid options stored")
-	}
-	good := "```markmap\n---\nmarkmap:\n  initialExpandLevel: -1\n---\n# Ich\n```"
-	e.post(admin, "/seiten/ich/bearbeiten", url.Values{"base": {"1"}, "title": {"Ich"}, "body": {good}})
-	if _, body := e.get(admin, "/seiten/ich"); !strings.Contains(body, `data-markmap-options="{&#34;initialExpandLevel&#34;:-1}"`) {
-		t.Errorf("options missing: %s", body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/javascript") {
+		t.Errorf("bundle: %d %v", resp.StatusCode, resp.Header)
 	}
 }
 
@@ -1106,7 +1092,7 @@ func TestStaticCaching(t *testing.T) {
 			t.Errorf("%s with stale tag: %d", p, r.StatusCode)
 		}
 	}
-	if r := get("/static/vendor/d3-7.9.0.min.js", ""); r.Header.Get("Cache-Control") != "public, max-age=31536000, immutable" {
+	if r := get("/static/vendor/markmap-1.1.1.js", ""); r.Header.Get("Cache-Control") != "public, max-age=31536000, immutable" {
 		t.Errorf("vendor: %v", r.Header)
 	}
 }

@@ -1,4 +1,4 @@
-.PHONY: build test lint check run tidy docker-build clean validate demo
+.PHONY: build test lint check run tidy docker-build clean validate demo vendor-markmap
 
 build:
 	CGO_ENABLED=0 go build -trimpath -o allmend ./cmd/allmend
@@ -36,6 +36,10 @@ demo:
 VNU := .cache/vnu.jar
 $(VNU):
 	mkdir -p .cache && cd .cache && npm pack vnu-jar@26.11.4 --silent && tar xzf vnu-jar-*.tgz && cp package/build/dist/vnu.jar vnu.jar
+# Rebuild the Markmap bundle in ui/static/vendor (version: tools/markmap/package.json).
+vendor-markmap:
+	tools/markmap/build.sh
+
 validate: $(VNU)
 	rm -rf .cache/html && mkdir -p .cache/html
 	ALLMEND_HTML_DUMP=$(CURDIR)/.cache/html go test -count=1 -run TestPagesRender ./internal/webui/

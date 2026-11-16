@@ -7,7 +7,7 @@
 {{with $d.Parent}}{{if .Title}}<p class="muted">Wird eine Unterseite von „{{.Title}}“.</p>{{end}}{{end}}{{end}}
 <label>Titel<input type="text" name="title" maxlength="120" required value="{{$d.Title}}"></label>
 <label>Text<textarea name="body" rows="22" spellcheck="true">{{$d.Body}}</textarea>
-<span class="hint">Markdown: <code># Titel</code>, <code>**fett**</code>, <code>- [ ] Aufgabe</code>, Tabellen, <code>```mermaid</code> für Diagramme, <code>```markmap</code> für Mindmaps aus Überschriften und Listen (Kopf wie bei Markmap, <code>initialExpandLevel: -1</code> öffnet alle Ebenen).</span></label>
+<span class="hint">Markdown: <code># Titel</code>, <code>**fett**</code>, <code>- [ ] Aufgabe</code>, Tabellen, <code>```mermaid</code> für Diagramme, <code>```markmap</code> für Mindmaps aus Überschriften und Listen (Optionen und magische Kommentare wie bei Markmap).</span></label>
 <div class="actions"><button class="button" type="submit">Speichern</button></div>
 </form>
 {{if $d.Current}}<details class="card" open>
