@@ -4,6 +4,16 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.12.1] - 2026-11-16
+
+### Fixed
+
+- After an update the browser kept using the old copy of Allmend's own
+  scripts and styles for up to an hour (e.g. Markmap options were accepted
+  but ignored). They are now revalidated on every load (`no-cache` with an
+  ETag; unchanged files answer 304). Vendored files keep their year-long
+  cache, their names carry the version.
+
 ## [0.12.0] - 2026-11-16
 
 ### Added

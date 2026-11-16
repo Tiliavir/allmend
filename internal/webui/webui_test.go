@@ -1073,3 +1073,40 @@ func TestAppName(t *testing.T) {
 		t.Errorf("%+v", m)
 	}
 }
+
+// Own static files keep their names across releases, so they must be
+// revalidated; a cached copy made a release's new seiten.js invisible.
+func TestStaticCaching(t *testing.T) {
+	e := newEnv(t)
+	get := func(p, etag string) *http.Response {
+		req, err := http.NewRequest(http.MethodGet, e.srv.URL+p, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if etag != "" {
+			req.Header.Set("If-None-Match", etag)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		return resp
+	}
+	for _, p := range []string{"/static/seiten.js", "/static/allmend.css"} {
+		r := get(p, "")
+		tag := r.Header.Get("ETag")
+		if r.StatusCode != 200 || r.Header.Get("Cache-Control") != "no-cache" || tag == "" {
+			t.Fatalf("%s: %d %v", p, r.StatusCode, r.Header)
+		}
+		if r := get(p, tag); r.StatusCode != http.StatusNotModified {
+			t.Errorf("%s revalidation: %d", p, r.StatusCode)
+		}
+		if r := get(p, `"old"`); r.StatusCode != 200 {
+			t.Errorf("%s with stale tag: %d", p, r.StatusCode)
+		}
+	}
+	if r := get("/static/vendor/d3-7.9.0.min.js", ""); r.Header.Get("Cache-Control") != "public, max-age=31536000, immutable" {
+		t.Errorf("vendor: %v", r.Header)
+	}
+}

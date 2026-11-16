@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"io/fs"
@@ -14,6 +16,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tiliavir/allmend/internal/account"
@@ -230,9 +233,32 @@ func logRequests(next http.Handler) http.Handler {
 }
 
 // staticFiles serves ui/static. Vendored files (versioned names) are cached
-// for a year; big ones are stored gzipped only (name + ".gz").
+// for a year; big ones are stored gzipped only (name + ".gz"). Our own files
+// keep their names across releases, so the browser must revalidate them
+// (no-cache + ETag of the content): with max-age a release's changed script
+// was not used until the old copy expired.
 func staticFiles(fsys fs.FS) http.Handler {
 	files := http.FileServerFS(fsys)
+	// computed on first use: routes are also built without files (tests)
+	etags := sync.OnceValue(func() map[string]string {
+		m := map[string]string{}
+		err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			b, err := fs.ReadFile(fsys, p)
+			if err != nil {
+				return err
+			}
+			sum := sha256.Sum256(b)
+			m[strings.TrimSuffix(p, ".gz")] = `"` + hex.EncodeToString(sum[:8]) + `"`
+			return nil
+		})
+		if err != nil { // embedded files: not expected; without ETags they are just sent in full
+			slog.Error("static etags", "err", err)
+		}
+		return m
+	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
 		if p == "" || strings.HasSuffix(p, "/") || strings.HasSuffix(p, ".gz") {
@@ -245,7 +271,14 @@ func staticFiles(fsys fs.FS) http.Handler {
 		if strings.HasPrefix(p, "vendor/") {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else {
-			w.Header().Set("Cache-Control", "public, max-age=3600")
+			w.Header().Set("Cache-Control", "no-cache")
+			if tag, ok := etags()[p]; ok {
+				w.Header().Set("ETag", tag)
+				if r.Header.Get("If-None-Match") == tag {
+					w.WriteHeader(http.StatusNotModified)
+					return
+				}
+			}
 		}
 		if gz, err := fs.ReadFile(fsys, p+".gz"); err == nil {
 			if ct := mime.TypeByExtension(path.Ext(p)); ct != "" {
