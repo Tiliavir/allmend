@@ -18,8 +18,12 @@ const copies = {
   "chart.umd.min.js": "chart.js/dist/chart.umd.min.js",
   "leaflet.js": "leaflet/dist/leaflet.js",
   "leaflet.css": "leaflet/dist/leaflet.css",
-  "leaflet-heat.js": "leaflet.heat/dist/leaflet-heat.js",
+  // 1.x: dist/leaflet-heat.js is the ES module build; the plain script
+  // that sets L.heatLayer (Leaflet 1.x) is the -global build
+  "leaflet-heat.js": "leaflet.heat/dist/leaflet-heat-global.js",
 };
+// code bundled into a copied file (its licence must ship too)
+const bundled = ["simpleheat"];
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
@@ -33,6 +37,7 @@ for (const [name, from] of Object.entries(copies)) {
   write(name, readFileSync(join("node_modules", from)));
   packages.add(from.split("/")[0]);
 }
+for (const name of bundled) packages.add(name);
 
 // Markmap: entry markmap.js, chunks carry a content hash
 const tmp = join(tmpdir(), `allmend-markmap-${process.pid}`);
