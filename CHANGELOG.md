@@ -4,6 +4,16 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.14.0] - 2026-11-16
+
+### Changed
+
+- Front-end libraries (Chart.js, Leaflet, leaflet.heat, Mermaid, Markmap)
+  are no longer in git: `tools/vendor` pins them, `make vendor` (and the
+  Docker build) puts them into `ui/static/vendor`. Dependabot proposes
+  updates. File names no longer carry versions; static files are
+  revalidated by ETag. The server refuses to start if they are missing.
+
 ## [0.13.0] - 2026-11-16
 
 ### Changed

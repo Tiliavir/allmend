@@ -92,7 +92,7 @@ func (s *Server) ortePage(w http.ResponseWriter, r *http.Request, status int, na
 	s.render(w, r, status, "orte/"+name, Page{Title: title, Module: account.Orte, Error: errMsg, Data: d, Scripts: scripts})
 }
 
-var mapScripts = []Script{{Src: "/static/vendor/leaflet-1.9.4.js"}, {Src: "/static/orte.js", Module: true}}
+var mapScripts = []Script{{Src: "/static/vendor/leaflet.js"}, {Src: "/static/orte.js", Module: true}}
 
 func (s *Server) orteErr(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, places.ErrNotFound) {
@@ -443,7 +443,7 @@ func (s *Server) orteHeat(w http.ResponseWriter, r *http.Request, a account.Acco
 	}
 	d.Map = map[string]any{"bounds": [][2]float64{{b.South, b.West}, {b.North, b.East}}, "zoom": z, "cells": heatCells(cells), "live": !s.Demo}
 	s.ortePage(w, r, http.StatusOK, "heat", "Karte", "", d,
-		Script{Src: "/static/vendor/leaflet-1.9.4.js"}, Script{Src: "/static/vendor/leaflet-heat-0.2.0.js"}, Script{Src: "/static/orte-karte.js", Module: true})
+		Script{Src: "/static/vendor/leaflet.js"}, Script{Src: "/static/vendor/leaflet-heat.js"}, Script{Src: "/static/orte-karte.js", Module: true})
 }
 
 // fitZoom is the zoom at which b fits a map about 700 px wide.

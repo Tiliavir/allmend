@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -232,11 +233,36 @@ func logRequests(next http.Handler) http.Handler {
 	})
 }
 
-// staticFiles serves ui/static. Vendored files (versioned names) are cached
-// for a year; big ones are stored gzipped only (name + ".gz"). Our own files
-// keep their names across releases, so the browser must revalidate them
-// (no-cache + ETag of the content): with max-age a release's changed script
-// was not used until the old copy expired.
+// vendorFiles are the libraries in ui/static/vendor the pages refer to.
+var vendorFiles = []string{"mermaid.min.js", "chart.umd.min.js", "leaflet.js", "leaflet.css", "leaflet-heat.js", "markmap.js", "LICENSES.txt"}
+
+// CheckVendor reports libraries missing from static. They are not in git
+// but built by `make vendor` (ADR vendor-build); a binary built without them
+// would serve pages without charts, maps and diagrams.
+func CheckVendor(static fs.FS) error {
+	var missing []string
+	for _, f := range vendorFiles {
+		_, err := fs.Stat(static, "vendor/"+f)
+		if errors.Is(err, fs.ErrNotExist) {
+			_, err = fs.Stat(static, "vendor/"+f+".gz")
+		}
+		if errors.Is(err, fs.ErrNotExist) {
+			missing = append(missing, f)
+		} else if err != nil {
+			return fmt.Errorf("webui: vendor/%s: %w", f, err)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("webui: ui/static/vendor lacks %s; run `make vendor` before building", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+// staticFiles serves ui/static, including the libraries in vendor/ (built by
+// make vendor). Big files are stored gzipped only (name + ".gz"). Files keep
+// their names across releases, so the browser must revalidate them
+// (no-cache + ETag of the content; 304 when unchanged): with max-age a
+// release's changed script was not used until the old copy expired.
 func staticFiles(fsys fs.FS) http.Handler {
 	files := http.FileServerFS(fsys)
 	// computed on first use: routes are also built without files (tests)
@@ -268,16 +294,12 @@ func staticFiles(fsys fs.FS) http.Handler {
 		if strings.HasSuffix(p, ".webmanifest") { // not in Go's built-in MIME table
 			w.Header().Set("Content-Type", "application/manifest+json")
 		}
-		if strings.HasPrefix(p, "vendor/") {
-			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		} else {
-			w.Header().Set("Cache-Control", "no-cache")
-			if tag, ok := etags()[p]; ok {
-				w.Header().Set("ETag", tag)
-				if r.Header.Get("If-None-Match") == tag {
-					w.WriteHeader(http.StatusNotModified)
-					return
-				}
+		w.Header().Set("Cache-Control", "no-cache")
+		if tag, ok := etags()[p]; ok {
+			w.Header().Set("ETag", tag)
+			if r.Header.Get("If-None-Match") == tag {
+				w.WriteHeader(http.StatusNotModified)
+				return
 			}
 		}
 		if gz, err := fs.ReadFile(fsys, p+".gz"); err == nil {

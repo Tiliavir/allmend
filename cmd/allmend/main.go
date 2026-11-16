@@ -196,6 +196,9 @@ func newServer(st *store.Store, accounts *account.Service, baseCurrency string, 
 	if err != nil {
 		return nil, err
 	}
+	if err := webui.CheckVendor(static); err != nil {
+		return nil, err
+	}
 	loc, err := time.LoadLocation("Europe/Zurich")
 	if err != nil {
 		return nil, err

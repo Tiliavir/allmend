@@ -15,7 +15,7 @@ if (mermaidBlocks.length > 0 && globalThis.mermaid) {
 // listed under the map, as Markmap's own editor does.
 const markmapBlocks = document.querySelectorAll("pre.markmap");
 if (markmapBlocks.length > 0) {
-  const { parse, Markmap, resolveViewOptions } = await import("/static/vendor/markmap-1.1.1.js");
+  const { parse, Markmap, resolveViewOptions } = await import("/static/vendor/markmap.js");
   for (const pre of markmapBlocks) {
     const { root, frontmatter } = parse(pre.textContent);
     const own = frontmatter.markmap && typeof frontmatter.markmap === "object" ? frontmatter.markmap : {};
