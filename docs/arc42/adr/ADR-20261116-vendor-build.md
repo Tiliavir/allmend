@@ -1,6 +1,6 @@
 # ADR-20261116: Front-end libraries built, not checked in
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 Chart.js, Leaflet, leaflet.heat and Mermaid were downloaded by hand and

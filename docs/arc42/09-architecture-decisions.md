@@ -25,4 +25,4 @@
 | [End-to-end tests with Playwright](adr/ADR-20261113-playwright-e2e.md) | Accepted |
 | [Orte: trips, location history, heatmap](adr/ADR-20261115-orte.md) | Accepted |
 | [Markmap mind maps on pages](adr/ADR-20261115-markmap.md) | Accepted |
-| [Front-end libraries built, not checked in](adr/ADR-20261116-vendor-build.md) | Proposed |
+| [Front-end libraries built, not checked in](adr/ADR-20261116-vendor-build.md) | Accepted |
