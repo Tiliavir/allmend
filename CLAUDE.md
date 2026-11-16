@@ -42,6 +42,7 @@ internal/webui       routing, middleware, handlers
 internal/demo        made-up data and static export for the public demo
 ui/templates, ui/static  (ui/static/sw.js: service worker, served as /sw.js)
 tests/e2e            Playwright browser tests against the real binary
+tools/vendor         pinned front-end libraries, build.mjs fills ui/static/vendor
 ```
 
 Layer rules are enforced by `internal/archtest`.
@@ -49,6 +50,7 @@ Layer rules are enforced by `internal/archtest`.
 ## Commands
 
 ```sh
+make vendor     # front-end libraries into ui/static/vendor (Node; not in git)
 make check      # lint + test + W3C validation (as CI)
 make run        # local server on :8080 (needs ALLMEND_ADMIN_PASSWORD_HASH)
 make demo       # static demo site in .cache/demo

@@ -214,7 +214,7 @@ func (s *Server) seitenView(w http.ResponseWriter, r *http.Request, a account.Ac
 		CanWrite: p.CanWrite(a), CanManage: p.CanManage(a),
 	}}
 	if res.HasMermaid {
-		pg.Scripts = append(pg.Scripts, Script{Src: "/static/vendor/mermaid-12.3.0.min.js"})
+		pg.Scripts = append(pg.Scripts, Script{Src: "/static/vendor/mermaid.min.js"})
 	}
 	if res.HasMermaid || res.HasMarkmap { // seiten.js imports Markmap itself, only when needed
 		pg.Scripts = append(pg.Scripts, Script{Src: "/static/seiten.js", Module: true})

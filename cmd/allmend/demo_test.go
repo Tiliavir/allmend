@@ -24,7 +24,7 @@ func TestDemo(t *testing.T) {
 	if n < 50 {
 		t.Errorf("only %d pages exported", n)
 	}
-	for _, f := range []string{"index.html", "404.html", "velo/index.html", "seiten/heimnetz/index.html", "static/demo.js", "static/vendor/mermaid-12.3.0.min.js"} {
+	for _, f := range []string{"index.html", "404.html", "velo/index.html", "seiten/heimnetz/index.html", "static/demo.js", "static/vendor/mermaid.min.js"} {
 		if _, err := os.Stat(filepath.Join(out, f)); err != nil {
 			t.Error(err)
 		}

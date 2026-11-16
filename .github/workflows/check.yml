@@ -17,6 +17,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: tools/vendor/package-lock.json
+      - run: make vendor
       - name: go test
         run: go test -race ./...
 
@@ -47,6 +53,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: tools/vendor/package-lock.json
+      - run: make vendor
       - run: make validate
 
   e2e:
@@ -60,8 +72,12 @@ jobs:
           cache: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            tools/vendor/package-lock.json
+      - run: make vendor
       - run: npm ci --ignore-scripts
       # Chrome is preinstalled on the runner (channel "chrome").
       - run: npx playwright test
