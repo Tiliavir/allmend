@@ -11,6 +11,7 @@ import (
 )
 
 func TestOfflineRequests(t *testing.T) {
+	t.Parallel()
 	s, _ := open(t)
 	ctx := context.Background()
 	now := time.Date(2026, 11, 13, 6, 0, 0, 0, time.UTC)

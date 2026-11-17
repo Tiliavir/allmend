@@ -26,6 +26,7 @@ const timelineOK = `{
 }`
 
 func TestParseTimeline(t *testing.T) {
+	t.Parallel()
 	tl, err := ParseTimeline(strings.NewReader(timelineOK))
 	if err != nil {
 		t.Fatal(err)
@@ -69,6 +70,7 @@ const timelineArray = `[
 ]`
 
 func TestParseTimelineArray(t *testing.T) {
+	t.Parallel()
 	tl, err := ParseTimeline(strings.NewReader(timelineArray))
 	if err != nil {
 		t.Fatal(err)
@@ -108,6 +110,7 @@ const kmlOK = `<?xml version="1.0" encoding="UTF-8"?>
 </kml>`
 
 func TestParseKML(t *testing.T) {
+	t.Parallel()
 	zurich, _ := time.LoadLocation("Europe/Zurich")
 	k, err := ParseKML(strings.NewReader(kmlOK), zurich)
 	if err != nil {
@@ -140,6 +143,7 @@ func TestParseKML(t *testing.T) {
 }
 
 func TestParseKMZ(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	w, _ := zw.Create("doc.kml")
@@ -156,6 +160,7 @@ func TestParseKMZ(t *testing.T) {
 }
 
 func TestCheckTrip(t *testing.T) {
+	t.Parallel()
 	ok := List{Name: "A", DateFrom: "2025-01-01", DateTo: "2025-01-02"}
 	if CheckTrip(ok) != nil {
 		t.Error("refused valid trip")

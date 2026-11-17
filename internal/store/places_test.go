@@ -38,6 +38,7 @@ func v14Setup(t *testing.T, legacy string) (*store.Store, error) {
 }
 
 func TestPlacesMigration(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s, err := v14Setup(t, `
 INSERT INTO places (id, owner_id, name, latitude, longitude, created_at, updated_at) VALUES ('p1', 'anna', 'Basel', 47.5596, 7.5886, `+ts0+`);
@@ -86,6 +87,7 @@ INSERT INTO place_visits (id, owner_id, latitude, longitude, at, seq, source_fil
 }
 
 func TestPlacesTripsAndHistory(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s, _ := open(t)
 	now := time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)

@@ -5,6 +5,7 @@ import "testing"
 func f(v float64) *float64 { return &v }
 
 func TestCompute(t *testing.T) {
+	t.Parallel()
 	y := Year{Year: 2026, CarDistKm: 7.6, TrainDistKm: 15, BikeDistKm: 18}
 	y.Months[0] = Month{Workdays: 20, CarTrain: 13, HomeOffice: 7}
 	v := Compute(y)
@@ -18,6 +19,7 @@ func TestCompute(t *testing.T) {
 }
 
 func TestRatesByYear(t *testing.T) {
+	t.Parallel()
 	for year, want := range map[int]int64{2020: 660, 2021: 670, 2025: 676, 2026: 836} {
 		y := Year{Year: year, CarDistKm: 7, TrainDistKm: 15}
 		y.Months[0] = Month{Workdays: 1, CarTrain: 1}
@@ -28,6 +30,7 @@ func TestRatesByYear(t *testing.T) {
 }
 
 func TestOverride(t *testing.T) {
+	t.Parallel()
 	y := Year{Year: 2026, CarDistKm: 7, TrainDistKm: 15, RateLowCents: f(30), RateHighCents: f(38), ThresholdKm: f(10)}
 	y.Months[0] = Month{Workdays: 1, CarTrain: 1}
 	if got := Compute(y).Derived[0].PendlerCents; got != 756 { // 10×30 + 12×38

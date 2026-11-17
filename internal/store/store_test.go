@@ -38,6 +38,7 @@ func open(t *testing.T) (*store.Store, string) {
 }
 
 func TestMigrateIdempotentWithBackup(t *testing.T) {
+	t.Parallel()
 	s, dir := open(t)
 	ctx := context.Background()
 	res, err := db.Migrate(ctx, s.DB(), migrations.All(), db.Options{BackupDir: filepath.Join(dir, "backup")})
@@ -51,6 +52,7 @@ func TestMigrateIdempotentWithBackup(t *testing.T) {
 }
 
 func TestMigrateRollsBackOnError(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "x.db")
 	ctx := context.Background()
@@ -74,6 +76,7 @@ func TestMigrateRollsBackOnError(t *testing.T) {
 }
 
 func TestRefusesNewerDatabase(t *testing.T) {
+	t.Parallel()
 	s, dir := open(t)
 	ctx := context.Background()
 	_, _ = s.DB().ExecContext(ctx, `INSERT INTO schema_migrations VALUES (999, 'future', '2030-01-01T00:00:00Z')`)
@@ -83,6 +86,7 @@ func TestRefusesNewerDatabase(t *testing.T) {
 }
 
 func TestAccounts(t *testing.T) {
+	t.Parallel()
 	s, _ := open(t)
 	ctx := context.Background()
 	r := s.Accounts()
@@ -108,6 +112,7 @@ func TestAccounts(t *testing.T) {
 }
 
 func TestSessionsAndFlows(t *testing.T) {
+	t.Parallel()
 	s, _ := open(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -133,6 +138,7 @@ func TestSessionsAndFlows(t *testing.T) {
 }
 
 func TestLinksOrder(t *testing.T) {
+	t.Parallel()
 	s, _ := open(t)
 	ctx := context.Background()
 	svc := links.Service{Repo: s.Links()}
@@ -158,6 +164,7 @@ func TestLinksOrder(t *testing.T) {
 }
 
 func TestPages(t *testing.T) {
+	t.Parallel()
 	s, _ := open(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -220,6 +227,7 @@ func TestPages(t *testing.T) {
 }
 
 func TestPageTreeMigration(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "allmend.db")
 	ctx := context.Background()
@@ -269,6 +277,7 @@ func TestPageTreeMigration(t *testing.T) {
 }
 
 func TestPageTree(t *testing.T) {
+	t.Parallel()
 	s, _ := open(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -377,6 +386,7 @@ func TestPageTree(t *testing.T) {
 }
 
 func TestCommuteConflict(t *testing.T) {
+	t.Parallel()
 	s, _ := open(t)
 	ctx := context.Background()
 	now := time.Now().UTC()

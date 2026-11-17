@@ -78,6 +78,7 @@ func goodClaims() map[string]any {
 }
 
 func TestLogin(t *testing.T) {
+	t.Parallel()
 	f := newFake(t)
 	f.claims = goodClaims()
 	c, err := f.provider().Login(context.Background(), "good-code", "ver", "n1")
@@ -93,6 +94,7 @@ func TestLogin(t *testing.T) {
 }
 
 func TestRejects(t *testing.T) {
+	t.Parallel()
 	f := newFake(t)
 	p := f.provider()
 	mod := func(k string, v any) map[string]any { c := goodClaims(); c[k] = v; return c }

@@ -31,6 +31,7 @@ func (e *env) replayPost(c *http.Client, path, key, konto string, form url.Value
 }
 
 func TestOfflineReplay(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	me := adminID(e)
@@ -93,6 +94,7 @@ func TestOfflineReplay(t *testing.T) {
 // TestOfflineReplayForeignKey: a key applied for one account is no
 // redirect for another.
 func TestOfflineReplayForeignKey(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	me := adminID(e)
@@ -112,6 +114,7 @@ func TestOfflineReplayForeignKey(t *testing.T) {
 }
 
 func TestOfflineHeadersAndWorker(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	me := adminID(e)
@@ -150,6 +153,7 @@ func TestOfflineHeadersAndWorker(t *testing.T) {
 }
 
 func TestOfflineReplayAusgaben(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	aid := adminID(e)

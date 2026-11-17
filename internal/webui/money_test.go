@@ -3,6 +3,7 @@ package webui
 import "testing"
 
 func TestMoney(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]int64{"": 0, "12": 1200, "12.5": 1250, "12,05": 1205, "2'500.00": 250000, "0.01": 1} {
 		if got, err := parseMoney(in); err != nil || got != want {
 			t.Errorf("parseMoney(%q) = %d, %v", in, got, err)

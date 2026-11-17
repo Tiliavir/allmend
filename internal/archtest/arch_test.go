@@ -34,6 +34,7 @@ var forbidden = map[string][]string{
 }
 
 func TestLayers(t *testing.T) {
+	t.Parallel()
 	for pkg, deny := range forbidden {
 		deps := map[string]bool{}
 		collect(t, mod+pkg, deps)

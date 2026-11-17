@@ -6,6 +6,7 @@ import (
 )
 
 func TestRoundTrip(t *testing.T) {
+	t.Parallel()
 	h := Hash("correct horse battery")
 	if err := Verify("correct horse battery", h); err != nil {
 		t.Fatalf("verify: %v", err)
@@ -16,6 +17,7 @@ func TestRoundTrip(t *testing.T) {
 }
 
 func TestMalformed(t *testing.T) {
+	t.Parallel()
 	for _, h := range []string{"", "plain", "$argon2i$v=19$m=1,t=1,p=1$c2FsdHNhbHQ$a2V5a2V5a2V5a2V5a2V5", "$argon2id$v=19$m=1,t=1$c2FsdHNhbHQ$a2V5a2V5a2V5a2V5a2V5", "$argon2id$v=19$m=1,t=1,p=1,x=2$c2FsdHNhbHQ$a2V5a2V5a2V5a2V5a2V5"} {
 		if err := Valid(h); err == nil {
 			t.Errorf("Valid(%q) = nil, want error", h)

@@ -14,6 +14,7 @@ func tours() []Tour {
 }
 
 func TestSummaries(t *testing.T) {
+	t.Parallel()
 	rows := YearRows(tours())
 	if len(rows) != 2 || rows[0].Year != 2026 || rows[0].Km != 30 || rows[1].Months[2] != 140 || rows[1].Tours != 2 {
 		t.Fatalf("rows %+v", rows)
@@ -27,6 +28,7 @@ func TestSummaries(t *testing.T) {
 }
 
 func TestRecords(t *testing.T) {
+	t.Parallel()
 	r := Records(tours())
 	want := map[string]string{"Längste Tour": "100 km", "Meiste Höhenmeter": "1'200 m", "Bester Monat": "140 km", "Bestes Jahr": "140 km", "Meiste Touren in einem Monat": "2"}
 	for _, rec := range r {
@@ -46,6 +48,7 @@ func TestRecords(t *testing.T) {
 }
 
 func TestHeatmapAndCumulative(t *testing.T) {
+	t.Parallel()
 	h := Heatmap(tours(), 2026) // 2026-01-01 is a Thursday → 3 padding cells
 	if h[0].Level != -1 || h[3].Date != "2026-01-01" || len(h) != 3+365 {
 		t.Fatalf("heatmap start %+v len %d", h[:4], len(h))

@@ -10,6 +10,7 @@ import (
 // TestOfflineWritesAreRoutes: every offline form is a registered route, and
 // the worker's path expression matches exactly that route.
 func TestOfflineWritesAreRoutes(t *testing.T) {
+	t.Parallel()
 	mux := (&Server{}).routes()
 	res := writeRegexps()
 	for i, p := range offlineWrites {

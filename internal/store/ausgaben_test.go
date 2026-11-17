@@ -33,6 +33,7 @@ func ausgabenSetup(t *testing.T) (*store.Store, *ausgaben.Service, map[string]ac
 }
 
 func TestAusgabenGroupsAndEntries(t *testing.T) {
+	t.Parallel()
 	s, svc, acc := ausgabenSetup(t)
 	ctx := context.Background()
 	anna, ben, kim := acc["anna"], acc["ben"], acc["kim"]
@@ -126,6 +127,7 @@ const swExport = "Date,Description,Category,Cost,Currency,A,B\n\n" +
 	"2026-03-01,Total balance, , ,EUR,2.00,-2.00\n"
 
 func TestAusgabenRecurringBooking(t *testing.T) {
+	t.Parallel()
 	_, svc, acc := ausgabenSetup(t)
 	ctx := context.Background()
 	anna := acc["anna"]
@@ -176,6 +178,7 @@ func TestAusgabenRecurringBooking(t *testing.T) {
 }
 
 func TestAusgabenEditGroup(t *testing.T) {
+	t.Parallel()
 	_, svc, acc := ausgabenSetup(t)
 	ctx := context.Background()
 	anna, ben, kim := acc["anna"], acc["ben"], acc["kim"]

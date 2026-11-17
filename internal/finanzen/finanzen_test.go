@@ -9,6 +9,7 @@ import (
 )
 
 func TestApplyAverageCost(t *testing.T) {
+	t.Parallel()
 	txs := []Transaction{
 		{Date: "2025-01-01", Type: Buy, Quantity: 10, PriceCents: 10000, FeesCents: 500},
 		{Date: "2025-02-01", Type: Buy, Quantity: 10, PriceCents: 12000},
@@ -29,6 +30,7 @@ func TestApplyAverageCost(t *testing.T) {
 }
 
 func TestCheckHoldings(t *testing.T) {
+	t.Parallel()
 	ok := []Transaction{{Date: "2025-01-01", Type: Buy, Quantity: 1.5}, {Date: "2025-01-02", Type: Sell, Quantity: 1.5}}
 	if err := CheckHoldings(ok); err != nil {
 		t.Fatal(err)
@@ -40,6 +42,7 @@ func TestCheckHoldings(t *testing.T) {
 }
 
 func TestPriceAtAndRisk(t *testing.T) {
+	t.Parallel()
 	ps := []Price{{"2025-01-02", 10}, {"2025-01-03", 11}, {"2025-01-06", 12}}
 	if p, ok := PriceAt(ps, "2025-01-05"); !ok || p != 11 {
 		t.Fatal(p, ok)
@@ -65,6 +68,7 @@ func TestPriceAtAndRisk(t *testing.T) {
 }
 
 func TestEffectivePrefersProvider(t *testing.T) {
+	t.Parallel()
 	manual := []Weight{{Sector, "A", 0.5}, {Country, "CH", 1}}
 	prov := []Weight{{Sector, "Tech", 0.3}, {Sector, "Health", 0.6}}
 	e := Effective(manual, prov)
@@ -74,6 +78,7 @@ func TestEffectivePrefersProvider(t *testing.T) {
 }
 
 func TestChecks(t *testing.T) {
+	t.Parallel()
 	good := Security{Name: "X", Kind: ETF, Currency: "EUR", ISIN: "IE00BK5BQT80", Symbol: "VWCE.DEX"}
 	if err := CheckSecurity(good); err != nil {
 		t.Fatal(err)
@@ -161,6 +166,7 @@ func (fakeRates) Latest(_ context.Context, c, b string) (Rate, error) {
 }
 
 func TestRefresherBudgetAndErrors(t *testing.T) {
+	t.Parallel()
 	m := &fakeMarket{syms: []SymbolUse{{"A", ETF}, {"BAD", Stock}, {"C", ETF}}, curs: []string{"USD"},
 		profiles: map[string]Profile{"C": {Symbol: "C", FetchedAt: time.Now()}}}
 	q := &fakeQuotes{}
