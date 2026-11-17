@@ -17,6 +17,7 @@ import (
 // TestSeaMinesMigration: games stored before v10 keep their ships and shots;
 // their shots name no ship.
 func TestSeaMinesMigration(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "allmend.db")
 	ctx := context.Background()
@@ -71,6 +72,7 @@ func TestSeaMinesMigration(t *testing.T) {
 }
 
 func TestSchiffeMinesRoundTrip(t *testing.T) {
+	t.Parallel()
 	s, _ := open(t)
 	ctx := context.Background()
 	now := time.Date(2026, 11, 11, 12, 0, 0, 0, time.UTC)

@@ -6,6 +6,7 @@ import (
 )
 
 func TestLoad(t *testing.T) {
+	t.Parallel()
 	c, err := Load([]string{"ALLMEND_ADMIN_EMAIL=Me@Example.org", "ALLMEND_ADMIN_PASSWORD_HASH=x", "PATH=/bin"})
 	if err != nil {
 		t.Fatal(err)
@@ -20,6 +21,7 @@ func TestLoad(t *testing.T) {
 }
 
 func TestLoadErrors(t *testing.T) {
+	t.Parallel()
 	cases := map[string][]string{
 		"unknown":        {"ALLMEND_ADMIN_EMAIL=a@b.c", "ALLMEND_ADMIN_PASSWORD_HASH=x", "ALLMEND_TYPO=1"},
 		"no admin":       {"ALLMEND_ADMIN_PASSWORD_HASH=x"},

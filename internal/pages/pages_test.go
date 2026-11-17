@@ -3,6 +3,7 @@ package pages
 import "testing"
 
 func TestTaskText(t *testing.T) {
+	t.Parallel()
 	cases := map[string]string{
 		"- [ ] Milch":     "Milch",
 		"  * [x] Brot ":   "Brot",
@@ -26,6 +27,7 @@ func TestTaskText(t *testing.T) {
 }
 
 func TestSlugify(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]string{"Netzwerk & NAS": "netzwerk-nas", "Einkaufsliste": "einkaufsliste", "Grüße!": "gruesse", "  ": "seite", "日本": "seite"} {
 		if got := Slugify(in); got != want {
 			t.Errorf("Slugify(%q) = %q", in, got)

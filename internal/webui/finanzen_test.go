@@ -84,6 +84,7 @@ func finSeed(t *testing.T, e *env, admin *http.Client) map[string]string {
 }
 
 func TestFinanzen(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	ctx := context.Background()

@@ -11,6 +11,7 @@ import (
 var grp = Group{ID: "g", Members: []string{"anna", "ben", "mia"}}
 
 func TestEqual(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		amount int64
 		payer  string
@@ -41,6 +42,7 @@ func TestEqual(t *testing.T) {
 }
 
 func TestBalancesAndSettle(t *testing.T) {
+	t.Parallel()
 	es := []Entry{
 		{Kind: Expense, Amount: 9000, Currency: "EUR", PaidBy: "anna", Shares: Equal(grp, 9000, "anna", grp.Members)},
 		{Kind: Expense, Amount: 3000, Currency: "EUR", PaidBy: "ben", Shares: []Share{{"ben", 1000}, {"mia", 2000}}},
@@ -75,6 +77,7 @@ func TestBalancesAndSettle(t *testing.T) {
 }
 
 func TestRecurringDates(t *testing.T) {
+	t.Parallel()
 	if got := Clamp("2024-02", 31); got != "2024-02-29" {
 		t.Errorf("leap Feb: %s", got)
 	}
@@ -105,6 +108,7 @@ func TestRecurringDates(t *testing.T) {
 }
 
 func TestCheckEntry(t *testing.T) {
+	t.Parallel()
 	ok := Entry{GroupID: "g", Kind: Expense, Date: "2026-01-02", Description: "Markt", Category: "groceries", Amount: 1000, Currency: "EUR", PaidBy: "anna", Shares: []Share{{"anna", 500}, {"ben", 500}}}
 	if err := CheckEntry(grp, ok); err != nil {
 		t.Fatal(err)
@@ -151,6 +155,7 @@ func TestCheckEntry(t *testing.T) {
 }
 
 func TestCheckRecurring(t *testing.T) {
+	t.Parallel()
 	r := Recurring{GroupID: "g", Description: "Miete", Category: "rent", Amount: 120000, Currency: "CHF", PaidBy: "anna", Shares: Equal(grp, 120000, "anna", []string{"anna", "ben"}), Day: 31, Next: "2026-02-28"}
 	if err := CheckRecurring(grp, r); err != nil {
 		t.Fatal(err)
@@ -185,6 +190,7 @@ const swFile = "\ufeffDate,Description,Category,Cost,Currency,Anna Muster,Ben Mu
 var swNames = map[string]string{"Anna Muster": "anna", "Ben Muster": "ben", "Mia Muster": "mia"}
 
 func TestParseSplitwise(t *testing.T) {
+	t.Parallel()
 	es, err := ParseSplitwise(strings.NewReader(swFile), grp, swNames)
 	if err != nil {
 		t.Fatal(err)
@@ -223,6 +229,7 @@ func TestParseSplitwise(t *testing.T) {
 }
 
 func TestParseSplitwiseRejects(t *testing.T) {
+	t.Parallel()
 	cases := map[string]struct {
 		file  string
 		names map[string]string
@@ -259,6 +266,7 @@ func TestParseSplitwiseRejects(t *testing.T) {
 }
 
 func TestCategories(t *testing.T) {
+	t.Parallel()
 	n := 0
 	for _, m := range Mains {
 		for _, s := range m.Subs {
@@ -289,6 +297,7 @@ func TestCategories(t *testing.T) {
 }
 
 func TestSplitSettled(t *testing.T) {
+	t.Parallel()
 	two := Group{ID: "g", Members: []string{"anna", "ben"}}
 	at := func(m int) time.Time { return time.Date(2026, 1, 1, 0, m, 0, 0, time.UTC) }
 	exp := func(id, date, cur, payer string, amt int64, m int) Entry {
@@ -331,6 +340,7 @@ func TestSplitSettled(t *testing.T) {
 }
 
 func TestSpending(t *testing.T) {
+	t.Parallel()
 	es := []Entry{
 		{Kind: Expense, Date: "2026-01-02", Currency: "EUR", Category: "groceries", Amount: 1000, PaidBy: "anna", Shares: []Share{{"anna", 600}, {"ben", 400}}},
 		{Kind: Expense, Date: "2026-02-02", Currency: "EUR", Category: "groceries", Amount: 500, PaidBy: "ben", Shares: []Share{{"ben", 500}}},

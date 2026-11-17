@@ -8,6 +8,7 @@ import (
 )
 
 func TestSafe(t *testing.T) {
+	t.Parallel()
 	r, err := Render("<script>alert(1)</script>\n\n[x](javascript:alert(1)) <img src=x onerror=alert(1)>\n\n| a | b |\n|:-|-:|\n| 1 | 2 |\n", Tasks{})
 	if err != nil {
 		t.Fatal(err)
@@ -24,6 +25,7 @@ func TestSafe(t *testing.T) {
 }
 
 func TestTasksAndMermaid(t *testing.T) {
+	t.Parallel()
 	src := "# Einkauf\n\n- [ ] Milch & Brot\n- [x] Äpfel\n\n```mermaid\ngraph LR; A-->B\n```\n"
 	r, err := Render(src, Tasks{Action: "/seiten/einkauf/haken", Version: 7, Text: pages.TaskText})
 	if err != nil {
@@ -48,6 +50,7 @@ func TestTasksAndMermaid(t *testing.T) {
 }
 
 func TestMarkmap(t *testing.T) {
+	t.Parallel()
 	r, err := Render("```markmap\n---\nmarkmap:\n  foldLevel: 2\n---\n# Ich <!-- markmap: fold -->\n- <b>x</b>\n```\n", Tasks{})
 	if err != nil {
 		t.Fatal(err)

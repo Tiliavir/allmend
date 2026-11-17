@@ -1,8 +1,10 @@
 name: CI
 
 on:
+  # Branches are checked through their pull request; a push to every branch
+  # ran each PR twice.
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
 
 permissions:

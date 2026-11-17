@@ -12,7 +12,10 @@ linters:
     - misspell
     - gosec
     - nolintlint
+    - paralleltest # every test runs in parallel (CI time)
   settings:
+    paralleltest:
+      ignore-missing-subtests: true
     misspell:
       ignore-rules:
         - kompensation # German domain term (Arbeitswege)

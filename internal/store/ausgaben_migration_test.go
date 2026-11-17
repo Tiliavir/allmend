@@ -73,6 +73,7 @@ func strs(t *testing.T, d *sql.DB, q string) []string {
 // TestExpenseCategoriesMigration: old free-text categories are mapped to the
 // fixed keys; the database refuses unknown ones afterwards.
 func TestExpenseCategoriesMigration(t *testing.T) {
+	t.Parallel()
 	d, migrate := v12Setup(t, "Groceries", "Entertainment", "lebensmittel", "", "Medical expenses", " Wohnen ", "Life - Other")
 	if err := migrate(); err != nil {
 		t.Fatal(err)
@@ -116,6 +117,7 @@ func TestExpenseCategoriesMigration(t *testing.T) {
 
 // TestExpenseCategoriesMigrationAborts: unmapped values abort and are named.
 func TestExpenseCategoriesMigrationAborts(t *testing.T) {
+	t.Parallel()
 	d, migrate := v12Setup(t, "Groceries", "Znüni", "Hobby")
 	err := migrate()
 	if err == nil || !strings.Contains(err.Error(), `["Hobby" "Znüni"]`) {

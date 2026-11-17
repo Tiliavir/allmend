@@ -17,6 +17,7 @@ func fleet() []Ship {
 }
 
 func TestCheckFleet(t *testing.T) {
+	t.Parallel()
 	if err := CheckFleet(fleet(), 10, false); err != nil {
 		t.Fatal(err)
 	}
@@ -39,6 +40,7 @@ func TestCheckFleet(t *testing.T) {
 }
 
 func TestRandomFleetValid(t *testing.T) {
+	t.Parallel()
 	r := rand.New(rand.NewPCG(1, 2))
 	for i := range 50 {
 		for _, n := range []int{10, 12} {
@@ -50,6 +52,7 @@ func TestRandomFleetValid(t *testing.T) {
 }
 
 func TestCoord(t *testing.T) {
+	t.Parallel()
 	if Coord(1, 6) != "B7" {
 		t.Error(Coord(1, 6))
 	}
@@ -71,6 +74,7 @@ func newGame(v Variant) *Game {
 }
 
 func TestClassicTurnsAndWin(t *testing.T) {
+	t.Parallel()
 	g := newGame(Classic)
 	g.AutoWater = false
 	if g.Status != Playing || g.Turn != "a" {
@@ -114,6 +118,7 @@ func TestClassicTurnsAndWin(t *testing.T) {
 }
 
 func TestStreakAndAutoWater(t *testing.T) {
+	t.Parallel()
 	g := newGame(Streak)
 	g.Fire("a", [][2]int{{0, 6}}, NoShip, time.Now())
 	if g.Turn != "a" {
@@ -133,6 +138,7 @@ func TestStreakAndAutoWater(t *testing.T) {
 }
 
 func TestSalvo(t *testing.T) {
+	t.Parallel()
 	g := newGame(Salvo)
 	if n := g.ShotsPerTurn("a"); n != 5 {
 		t.Fatalf("salvo size %d", n)
@@ -161,6 +167,7 @@ func mines(v Variant) [][2]int {
 }
 
 func TestCheckSetupMines(t *testing.T) {
+	t.Parallel()
 	if err := CheckSetup(fleet(), mines(Mines), 3, 10, false); err != nil {
 		t.Fatal(err)
 	}
@@ -185,6 +192,7 @@ func TestCheckSetupMines(t *testing.T) {
 }
 
 func TestRandomSetupValid(t *testing.T) {
+	t.Parallel()
 	r := rand.New(rand.NewPCG(3, 4))
 	for i := range 50 {
 		ships, ms := RandomSetup(r, 10, MineCount, i%2 == 0)
@@ -195,6 +203,7 @@ func TestRandomSetupValid(t *testing.T) {
 }
 
 func TestMines(t *testing.T) {
+	t.Parallel()
 	g := newGame(Mines)
 	if g.Status != Playing {
 		t.Fatal("not started")
@@ -230,6 +239,7 @@ func TestMines(t *testing.T) {
 }
 
 func TestMinesLastShipLoses(t *testing.T) {
+	t.Parallel()
 	g := newGame(Mines)
 	// b has sunk all of a's ships but the last submarine (index 9).
 	for _, sh := range fleet()[:9] {

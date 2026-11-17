@@ -15,6 +15,7 @@ import (
 // TestDemo builds the demo site and checks that every link and asset in it
 // resolves to an exported file, as it must on GitHub Pages.
 func TestDemo(t *testing.T) {
+	t.Parallel()
 	out := filepath.Join(t.TempDir(), "site")
 	now := time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC)
 	n, err := buildDemo(context.Background(), out, "/demo/", now)

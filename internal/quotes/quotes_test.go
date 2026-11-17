@@ -12,6 +12,7 @@ import (
 )
 
 func TestParseDailyStrict(t *testing.T) {
+	t.Parallel()
 	ps, err := ParseDaily(map[string]map[string]string{"2025-01-03": {"4. close": "101.5"}, "2025-01-02": {"4. close": "100"}})
 	if err != nil || len(ps) != 2 || ps[0].Date != "2025-01-02" || ps[1].Close != 101.5 {
 		t.Fatal(ps, err)
@@ -40,6 +41,7 @@ func raw(t *testing.T, s string) map[string]json.RawMessage {
 }
 
 func TestParseETFProfile(t *testing.T) {
+	t.Parallel()
 	ws, err := ParseETFProfile(raw(t, `{"net_assets":"1","sectors":[{"sector":"INFORMATION TECHNOLOGY","weight":"0.31"},{"sector":"FINANCIALS","weight":0.15}],
 	"holdings":[{"symbol":"GOOGL","description":"ALPHABET INC","weight":"0.02"},{"symbol":"GOOG","description":"ALPHABET INC","weight":"0.018"},{"symbol":"X","description":"n/a","weight":"0.01"}]}`))
 	if err != nil {
@@ -63,6 +65,7 @@ func TestParseETFProfile(t *testing.T) {
 }
 
 func TestOverviewAndFrankfurter(t *testing.T) {
+	t.Parallel()
 	ws, err := ParseOverview(raw(t, `{"Symbol":"IBM","Sector":"TECHNOLOGY","Country":"USA","Currency":"USD"}`))
 	if err != nil || len(ws) != 3 || ws[1].Dimension != finanzen.Country {
 		t.Fatal(ws, err)
@@ -88,6 +91,7 @@ func TestOverviewAndFrankfurter(t *testing.T) {
 }
 
 func TestAlphaVantageHTTP(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		switch {

@@ -14,6 +14,7 @@ import (
 )
 
 func TestBackup(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	cfg := env.Config{DataDir: t.TempDir()}
 	d, err := db.Open(ctx, cfg.DBPath())
@@ -76,6 +77,7 @@ func TestBackup(t *testing.T) {
 }
 
 func TestBackupRejects(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	cfg := env.Config{DataDir: t.TempDir()}
 	if _, err := writeBackup(ctx, cfg, 0); err == nil {
@@ -90,6 +92,7 @@ func TestBackupRejects(t *testing.T) {
 }
 
 func TestBackupCommandArgs(t *testing.T) {
+	t.Parallel()
 	if err := run([]string{"backup", "extra"}); err == nil {
 		t.Error("extra argument accepted")
 	}

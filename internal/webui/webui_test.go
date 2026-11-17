@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"math/big"
@@ -26,6 +27,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"golang.org/x/crypto/argon2"
 	_ "modernc.org/sqlite"
 
 	"github.com/tiliavir/allmend/internal/account"
@@ -48,10 +50,21 @@ import (
 	"github.com/tiliavir/allmend/ui"
 )
 
+// hasher hashes with minimal argon2id parameters: the production cost
+// (64 MiB, t=3) dominated the test time, especially with -race. Verify is the
+// production code; it reads the parameters from the PHC string.
 type hasher struct{}
 
-func (hasher) Hash(pw string) string           { return password.Hash(pw) }
+func (hasher) Hash(pw string) string           { return cheapHash(pw) }
 func (hasher) Verify(pw, encoded string) error { return password.Verify(pw, encoded) }
+
+func cheapHash(pw string) string {
+	salt := make([]byte, 16)
+	_, _ = rand.Read(salt)
+	key := argon2.IDKey([]byte(pw), salt, 1, 64, 1, 32)
+	return fmt.Sprintf("$argon2id$v=%d$m=64,t=1,p=1$%s$%s", argon2.Version,
+		base64.RawStdEncoding.EncodeToString(salt), base64.RawStdEncoding.EncodeToString(key))
+}
 
 type env struct {
 	t        *testing.T
@@ -79,7 +92,7 @@ func newEnv(t *testing.T) *env {
 	}
 	st := store.New(d)
 	e := &env{t: t, st: st}
-	e.accounts = &account.Service{Repo: st.Accounts(), Hasher: hasher{}, AdminEmail: adminEmail, BreakGlassHash: password.Hash("break-glass-password")}
+	e.accounts = &account.Service{Repo: st.Accounts(), Hasher: hasher{}, AdminEmail: adminEmail, BreakGlassHash: cheapHash("break-glass-password")}
 	if _, err := e.accounts.EnsureAdmin(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -142,6 +155,7 @@ func (e *env) loginAdmin() *http.Client {
 }
 
 func TestPublicStartAndGuards(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	c := e.client()
 	if r, body := e.get(c, "/"); r.StatusCode != 200 || !strings.Contains(body, "Anmelden") {
@@ -162,6 +176,7 @@ func TestPublicStartAndGuards(t *testing.T) {
 }
 
 func TestLocalLoginFailure(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	resp := e.post(e.client(), "/anmelden", url.Values{"email": {adminEmail}, "password": {"wrong"}})
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -170,6 +185,7 @@ func TestLocalLoginFailure(t *testing.T) {
 }
 
 func TestCrossOriginPostRejected(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	c := e.loginAdmin()
 	req, _ := http.NewRequest(http.MethodPost, e.srv.URL+"/verwaltung/links", strings.NewReader("name=x&url=https://x.example&icon=link"))
@@ -182,6 +198,7 @@ func TestCrossOriginPostRejected(t *testing.T) {
 }
 
 func TestInviteGoogleLoginAndAccess(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	resp := e.post(admin, "/verwaltung/konten", url.Values{"email": {"Kim@Example.org"}, "name": {"Kim"}, "module": {"velo"}})
@@ -221,6 +238,7 @@ func TestInviteGoogleLoginAndAccess(t *testing.T) {
 }
 
 func TestGoogleUnknownAccountDenied(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	e.idp.next = map[string]any{"sub": "g-x", "email": "stranger@example.org", "email_verified": true}
 	c := e.client()
@@ -233,6 +251,7 @@ func TestGoogleUnknownAccountDenied(t *testing.T) {
 }
 
 func TestOneTimePasswordMustBeChanged(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	e.post(admin, "/verwaltung/konten", url.Values{"email": {"lou@example.org"}})
@@ -261,6 +280,7 @@ func TestOneTimePasswordMustBeChanged(t *testing.T) {
 }
 
 func TestLastAdminProtected(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	a, _ := e.st.Accounts().ByEmail(context.Background(), adminEmail)
@@ -270,6 +290,7 @@ func TestLastAdminProtected(t *testing.T) {
 }
 
 func TestTheme(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	if _, body := e.get(admin, "/konto"); !strings.Contains(body, `href="/static/dark.css" media="(prefers-color-scheme: dark)"`) {
@@ -298,6 +319,7 @@ func TestTheme(t *testing.T) {
 }
 
 func TestDeleteAccount(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	ctx := context.Background()
@@ -352,6 +374,7 @@ func TestDeleteAccount(t *testing.T) {
 }
 
 func TestLinksVisibility(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	e.post(admin, "/verwaltung/links", url.Values{"name": {"Öffentlich"}, "url": {"https://pub.example"}, "icon": {"link"}, "public": {"1"}})
@@ -413,6 +436,7 @@ func (f *fakeGoogle) provider(redirect string) *google.Provider {
 // TestPagesRender renders every page. With ALLMEND_HTML_DUMP set it writes
 // them there for the W3C validator (make validate, CI).
 func TestPagesRender(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	e.post(admin, "/verwaltung/links", url.Values{"name": {"Haken"}, "url": {"https://haken.example"}, "icon": {"check"}, "public": {"1"}, "description": {"Aufgaben"}})
@@ -521,6 +545,7 @@ func TestPagesRender(t *testing.T) {
 }
 
 func TestSeiten(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	e.post(admin, "/verwaltung/konten", url.Values{"email": {"kim@example.org"}, "module": {"seiten"}})
@@ -583,6 +608,7 @@ func TestSeiten(t *testing.T) {
 }
 
 func TestPageTreeMove(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	ctx := context.Background()
@@ -639,6 +665,7 @@ func TestPageTreeMove(t *testing.T) {
 }
 
 func TestMermaidCSPAndGzipAsset(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	e.post(admin, "/seiten", url.Values{"title": {"Plain"}, "body": {"Hallo"}})
@@ -664,6 +691,7 @@ func TestMermaidCSPAndGzipAsset(t *testing.T) {
 }
 
 func TestMarkmapPage(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	e.post(admin, "/seiten", url.Values{"title": {"Ich"}, "body": {"```markmap\n---\nmarkmap:\n  theme: cards\n---\n# Ich\n- ~~Colygon~~\n```"}})
@@ -703,6 +731,7 @@ func awForm(year int, extra map[string]string) url.Values {
 }
 
 func TestArbeitswege(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	ctx := context.Background()
@@ -766,6 +795,7 @@ func adminID(e *env) string {
 }
 
 func TestVeloPrivate(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	ctx := context.Background()
@@ -827,6 +857,7 @@ func fleetForm(ships []schiffe.Ship) url.Values {
 }
 
 func TestSchiffe(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	ctx := context.Background()
@@ -898,6 +929,7 @@ func TestSchiffe(t *testing.T) {
 }
 
 func TestSchiffeMines(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	ctx := context.Background()
@@ -990,6 +1022,7 @@ func (e *env) postBody(c *http.Client, path string, form url.Values) (*http.Resp
 // TestManifest: the web app manifest makes Allmend installable as a
 // standalone app (Android shows no address bar inside its scope).
 func TestManifest(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	_, page := e.get(e.client(), "/anmelden")
 	if !strings.Contains(page, `<link rel="manifest" href="/static/allmend.webmanifest">`) {
@@ -1040,6 +1073,7 @@ func TestManifest(t *testing.T) {
 // TestAppName: ALLMEND_APP_NAME renames the page title, the header and the
 // installed app; nothing else changes.
 func TestAppName(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	e.web.AppName = "Hof & Garten"
 	_, page := e.get(e.client(), "/anmelden")
@@ -1065,6 +1099,7 @@ func TestAppName(t *testing.T) {
 // ADR vendor-build), so they must be revalidated; a cached copy made a
 // release's new seiten.js invisible.
 func TestStaticCaching(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	get := func(p, etag string) *http.Response {
 		req, err := http.NewRequest(http.MethodGet, e.srv.URL+p, nil)
@@ -1097,6 +1132,7 @@ func TestStaticCaching(t *testing.T) {
 }
 
 func TestCheckVendor(t *testing.T) {
+	t.Parallel()
 	if err := webui.CheckVendor(os.DirFS("../../ui/static")); err != nil {
 		t.Fatal(err)
 	}

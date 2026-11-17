@@ -121,6 +121,7 @@ func agSeed(t *testing.T, e *env, admin *http.Client) map[string]string {
 }
 
 func TestAusgaben(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	kim, kimID := e.agLogin(admin, "kim@example.org", "ausgaben")

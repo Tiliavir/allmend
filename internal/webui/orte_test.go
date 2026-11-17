@@ -66,6 +66,7 @@ func orteSeed(t *testing.T, e *env, aid string) map[string]string {
 
 // TestOrteScope: others read trips, never the location history.
 func TestOrteScope(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	aid := adminID(e)
