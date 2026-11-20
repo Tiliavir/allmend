@@ -67,10 +67,8 @@ type seitenData struct {
 	Title, Body string
 	Base        int
 	Current     *pages.Page
-	// rights form
-	Candidates []account.Account
-	Readers    map[string]bool
-	Writers    map[string]bool
+	// rights fieldsets (new page, rights form)
+	Rights rightsForm
 	// revisions
 	Revisions []revRow
 	Revision  pages.Revision
@@ -145,36 +143,56 @@ func (s *Server) seitenNew(w http.ResponseWriter, r *http.Request, a account.Acc
 		}
 		d.Parent = &p
 	}
-	s.render(w, r, http.StatusOK, "seiten/edit", Page{Title: "Neue Seite", Module: account.Seiten, Data: d})
-}
-
-func (s *Server) seitenCreate(w http.ResponseWriter, r *http.Request, a account.Account) {
-	parent := r.PostFormValue("parent")
-	if !pageID(parent) {
-		s.status(w, r, http.StatusBadRequest)
-		return
-	}
-	p, err := s.Pages.Create(r.Context(), a, parent, r.PostFormValue("title"), r.PostFormValue("body"))
-	if errors.Is(err, pages.ErrInvalid) {
-		d := seitenData{Title: r.PostFormValue("title"), Body: r.PostFormValue("body")}
-		if parent != "" {
-			d.Parent = &pages.Page{ID: parent}
-		}
-		s.render(w, r, http.StatusUnprocessableEntity, "seiten/edit", Page{Title: "Neue Seite", Module: account.Seiten,
-			Error: invalidPage, Data: d})
-		return
-	}
-	if errors.Is(err, pages.ErrPlace) {
-		s.render(w, r, http.StatusUnprocessableEntity, "seiten/edit", Page{Title: "Neue Seite", Module: account.Seiten,
-			Error: "Die übergeordnete Seite gibt es nicht mehr. Die neue Seite kommt nach oben, wenn du nochmals speicherst.",
-			Data:  seitenData{Title: r.PostFormValue("title"), Body: r.PostFormValue("body")}})
-		return
-	}
+	_, all, err := s.names(r)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	s.redirect(w, r, "/seiten/"+p.Slug, "Seite angelegt.")
+	d.Rights = newRightsForm(pages.Public, a.ID, all)
+	s.render(w, r, http.StatusOK, "seiten/edit", Page{Title: "Neue Seite", Module: account.Seiten, Data: d})
+}
+
+func (s *Server) seitenCreate(w http.ResponseWriter, r *http.Request, a account.Account) {
+	if err := r.ParseForm(); err != nil {
+		s.status(w, r, http.StatusBadRequest)
+		return
+	}
+	parent := r.PostForm.Get("parent")
+	if !pageID(parent) {
+		s.status(w, r, http.StatusBadRequest)
+		return
+	}
+	_, all, err := s.names(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	rights, ok := parseRights(r, all)
+	if !ok {
+		s.status(w, r, http.StatusBadRequest)
+		return
+	}
+	title, body := r.PostForm.Get("title"), r.PostForm.Get("body")
+	again := func(msg string, parent *pages.Page) {
+		d := seitenData{Title: title, Body: body, Parent: parent, Rights: newRightsForm(rights, a.ID, all)}
+		s.render(w, r, http.StatusUnprocessableEntity, "seiten/edit", Page{Title: "Neue Seite", Module: account.Seiten,
+			Error: msg, Data: d})
+	}
+	p, err := s.Pages.Create(r.Context(), a, parent, title, body, rights)
+	switch {
+	case errors.Is(err, pages.ErrInvalid):
+		var keep *pages.Page
+		if parent != "" {
+			keep = &pages.Page{ID: parent}
+		}
+		again(invalidPage, keep)
+	case errors.Is(err, pages.ErrPlace):
+		again("Die übergeordnete Seite gibt es nicht mehr. Die neue Seite kommt nach oben, wenn du nochmals speicherst.", nil)
+	case err != nil:
+		s.fail(w, r, err)
+	default:
+		s.redirect(w, r, "/seiten/"+p.Slug, "Seite angelegt.")
+	}
 }
 
 var invalidPage = fmt.Sprintf("Titel fehlt oder ist länger als %d Zeichen, oder der Text ist zu lang.", pages.MaxTitle)
@@ -304,30 +322,13 @@ func (s *Server) seitenRights(w http.ResponseWriter, r *http.Request, a account.
 		s.fail(w, r, err)
 		return
 	}
-	d := seitenData{Page: p, Owner: names[p.OwnerID], Readers: set(p.Readers), Writers: set(p.Writers)}
-	for _, c := range all {
-		if c.ID != p.OwnerID && c.Can(account.Seiten) && c.Status != account.Disabled {
-			d.Candidates = append(d.Candidates, c)
-		}
-	}
+	d := seitenData{Page: p, Owner: names[p.OwnerID],
+		Rights: newRightsForm(pages.Rights{ReadAll: p.ReadAll, WriteAll: p.WriteAll, Readers: p.Readers, Writers: p.Writers}, p.OwnerID, all)}
 	s.render(w, r, http.StatusOK, "seiten/rights", Page{Title: "Rechte: " + p.Title, Module: account.Seiten, Data: d})
-}
-
-func set(ids []string) map[string]bool {
-	m := map[string]bool{}
-	for _, id := range ids {
-		m[id] = true
-	}
-	return m
 }
 
 func (s *Server) seitenRightsSave(w http.ResponseWriter, r *http.Request, a account.Account) {
 	if err := r.ParseForm(); err != nil {
-		s.status(w, r, http.StatusBadRequest)
-		return
-	}
-	read, write := r.PostForm.Get("read"), r.PostForm.Get("write")
-	if !slices.Contains([]string{"all", "some"}, read) || !slices.Contains([]string{"all", "some"}, write) {
 		s.status(w, r, http.StatusBadRequest)
 		return
 	}
@@ -336,24 +337,61 @@ func (s *Server) seitenRightsSave(w http.ResponseWriter, r *http.Request, a acco
 		s.fail(w, r, err)
 		return
 	}
+	rights, ok := parseRights(r, all)
+	if !ok {
+		s.status(w, r, http.StatusBadRequest)
+		return
+	}
+	p, err := s.Pages.SetRights(r.Context(), a, r.PathValue("slug"), rights)
+	if err != nil {
+		s.pageError(w, r, err)
+		return
+	}
+	s.redirect(w, r, "/seiten/"+p.Slug, "Rechte gespeichert.")
+}
+
+// rightsForm fills the read/edit fieldsets ("seitenrechte" in partials.html).
+type rightsForm struct {
+	ReadAll, WriteAll bool
+	Readers, Writers  map[string]bool
+	Candidates        []account.Account // everyone who may get rights, without the owner
+}
+
+func newRightsForm(r pages.Rights, owner string, all []account.Account) rightsForm {
+	f := rightsForm{ReadAll: r.ReadAll || r.WriteAll, WriteAll: r.WriteAll, Readers: set(r.Readers), Writers: set(r.Writers)}
+	for _, c := range all {
+		if c.ID != owner && c.Can(account.Seiten) && c.Status != account.Disabled {
+			f.Candidates = append(f.Candidates, c)
+		}
+	}
+	return f
+}
+
+// parseRights reads the fieldsets from a parsed form. Both choices are
+// required and every account must exist; anything else is a bad request.
+func parseRights(r *http.Request, all []account.Account) (pages.Rights, bool) {
+	read, write := r.PostForm.Get("read"), r.PostForm.Get("write")
+	if !slices.Contains([]string{"all", "some"}, read) || !slices.Contains([]string{"all", "some"}, write) {
+		return pages.Rights{}, false
+	}
 	known := map[string]bool{}
 	for _, c := range all {
 		known[c.ID] = true
 	}
 	for _, id := range append(slices.Clone(r.PostForm["reader"]), r.PostForm["writer"]...) {
 		if !known[id] {
-			s.status(w, r, http.StatusBadRequest)
-			return
+			return pages.Rights{}, false
 		}
 	}
-	p, err := s.Pages.SetRights(r.Context(), a, r.PathValue("slug"), pages.Rights{
-		ReadAll: read == "all", WriteAll: write == "all", Readers: r.PostForm["reader"], Writers: r.PostForm["writer"],
-	})
-	if err != nil {
-		s.pageError(w, r, err)
-		return
+	return pages.Rights{ReadAll: read == "all", WriteAll: write == "all", Readers: r.PostForm["reader"], Writers: r.PostForm["writer"]}, true
+}
+
+func set(ids []string) map[string]bool {
+	m := map[string]bool{}
+	for _, id := range ids {
+		m[id] = true
 	}
-	s.redirect(w, r, "/seiten/"+p.Slug, "Rechte gespeichert.")
+	return m
 }
 
 func (s *Server) seitenRevisions(w http.ResponseWriter, r *http.Request, a account.Account) {

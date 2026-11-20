@@ -240,10 +240,9 @@ func (s *Service) readableByID(ctx context.Context, a account.Account, id string
 	return ps[i], nil
 }
 
-// Create adds a page owned by a, readable and editable by everyone with
-// access, as the last child of parentID ("" for the top level), which a must
-// be able to read.
-func (s *Service) Create(ctx context.Context, a account.Account, parentID, title, body string) (Page, error) {
+// Create adds a page owned by a with rights r, as the last child of parentID
+// ("" for the top level), which a must be able to read.
+func (s *Service) Create(ctx context.Context, a account.Account, parentID, title, body string, r Rights) (Page, error) {
 	title, body, err := validate(title, body)
 	if err != nil {
 		return Page{Title: title, Body: body}, err
@@ -259,7 +258,8 @@ func (s *Service) Create(ctx context.Context, a account.Account, parentID, title
 	}
 	now := s.now()
 	p := Page{ID: id.New(), Slug: slug, ParentID: parentID, Title: title, Body: body, Version: 1, OwnerID: a.ID,
-		ReadAll: true, WriteAll: true, CreatedAt: now, UpdatedAt: now, UpdatedBy: a.ID}
+		CreatedAt: now, UpdatedAt: now, UpdatedBy: a.ID}
+	p.apply(r)
 	return p, s.Repo.Insert(ctx, p)
 }
 
@@ -292,6 +292,22 @@ type Rights struct {
 	Readers, Writers  []string
 }
 
+// Public lets everyone with access read and edit; the default for new pages.
+var Public = Rights{ReadAll: true, WriteAll: true}
+
+// apply sets p's rights from r: whoever may edit may also read, and the
+// account lists are kept only where they matter.
+func (p *Page) apply(r Rights) {
+	p.ReadAll, p.WriteAll = r.ReadAll || r.WriteAll, r.WriteAll
+	p.Readers, p.Writers = nil, nil
+	if !p.ReadAll {
+		p.Readers = uniq(r.Readers)
+	}
+	if !p.WriteAll {
+		p.Writers = uniq(r.Writers)
+	}
+}
+
 // SetRights changes who may read and edit; owner and admins only.
 func (s *Service) SetRights(ctx context.Context, a account.Account, slug string, r Rights) (Page, error) {
 	p, err := s.Get(ctx, a, slug)
@@ -301,14 +317,7 @@ func (s *Service) SetRights(ctx context.Context, a account.Account, slug string,
 	if !p.CanManage(a) {
 		return p, ErrForbidden
 	}
-	p.ReadAll, p.WriteAll = r.ReadAll || r.WriteAll, r.WriteAll
-	p.Readers, p.Writers = nil, nil
-	if !p.ReadAll {
-		p.Readers = uniq(r.Readers)
-	}
-	if !p.WriteAll {
-		p.Writers = uniq(r.Writers)
-	}
+	p.apply(r)
 	return p, s.Repo.SetRights(ctx, p)
 }
 

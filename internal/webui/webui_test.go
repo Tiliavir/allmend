@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -441,7 +442,7 @@ func TestPagesRender(t *testing.T) {
 	admin := e.loginAdmin()
 	e.post(admin, "/verwaltung/links", url.Values{"name": {"Haken"}, "url": {"https://haken.example"}, "icon": {"check"}, "public": {"1"}, "description": {"Aufgaben"}})
 	e.post(admin, "/verwaltung/konten", url.Values{"email": {"kim@example.org"}, "module": {"velo", "seiten", "schiffe"}})
-	e.post(admin, "/seiten", url.Values{"title": {"Netzwerk"}, "body": {"# Netz\n\n- [ ] Router\n- [x] NAS\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```mermaid\ngraph LR; A-->B\n```\n\n```markmap\n# Netz\n- ~~Router~~\n- [x] Drucker\n```\n"}})
+	e.post(admin, "/seiten", url.Values{"read": {"all"}, "write": {"all"}, "title": {"Netzwerk"}, "body": {"# Netz\n\n- [ ] Router\n- [x] NAS\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```mermaid\ngraph LR; A-->B\n```\n\n```markmap\n# Netz\n- ~~Router~~\n- [x] Drucker\n```\n"}})
 	e.post(admin, "/arbeitswege", awForm(2026, map[string]string{"workdays_0": "20", "car_train_0": "13", "ho_0": "7"}))
 	e.post(admin, "/velo/velos", url.Values{"name": {"Gravel"}, "purchase": {"2500"}, "color": {"#5c7a3e"}})
 	bikes, _ := e.st.Velo().Bikes(context.Background(), adminID(e))
@@ -564,7 +565,7 @@ func TestSeiten(t *testing.T) {
 	}
 	kim, lou := login("kim@example.org", kimPW), login("lou@example.org", louPW)
 
-	if r := e.post(kim, "/seiten", url.Values{"title": {"Einkauf"}, "body": {"- [ ] Milch\n- [ ] Brot"}}); r.Header.Get("Location") != "/seiten/einkauf" {
+	if r := e.post(kim, "/seiten", url.Values{"read": {"all"}, "write": {"all"}, "title": {"Einkauf"}, "body": {"- [ ] Milch\n- [ ] Brot"}}); r.Header.Get("Location") != "/seiten/einkauf" {
 		t.Fatalf("create: %d %s", r.StatusCode, r.Header.Get("Location"))
 	}
 	if r, _ := e.get(lou, "/seiten"); r.StatusCode != http.StatusForbidden {
@@ -612,12 +613,12 @@ func TestPageTreeMove(t *testing.T) {
 	e := newEnv(t)
 	admin := e.loginAdmin()
 	ctx := context.Background()
-	e.post(admin, "/seiten", url.Values{"title": {"Haus"}, "body": {"x"}})
+	e.post(admin, "/seiten", url.Values{"read": {"all"}, "write": {"all"}, "title": {"Haus"}, "body": {"x"}})
 	haus, _ := e.st.Pages().BySlug(ctx, "haus")
-	if r := e.post(admin, "/seiten", url.Values{"title": {"Heizung"}, "body": {"y"}, "parent": {haus.ID}}); r.Header.Get("Location") != "/seiten/heizung" {
+	if r := e.post(admin, "/seiten", url.Values{"read": {"all"}, "write": {"all"}, "title": {"Heizung"}, "body": {"y"}, "parent": {haus.ID}}); r.Header.Get("Location") != "/seiten/heizung" {
 		t.Fatalf("create below: %d %s", r.StatusCode, r.Header.Get("Location"))
 	}
-	e.post(admin, "/seiten", url.Values{"title": {"Garten"}, "body": {"z"}})
+	e.post(admin, "/seiten", url.Values{"read": {"all"}, "write": {"all"}, "title": {"Garten"}, "body": {"z"}})
 	heiz, _ := e.st.Pages().BySlug(ctx, "heizung")
 	garten, _ := e.st.Pages().BySlug(ctx, "garten")
 	if heiz.ParentID != haus.ID {
@@ -659,8 +660,71 @@ func TestPageTreeMove(t *testing.T) {
 	if garten.ParentID != "" {
 		t.Errorf("loop moved the page: %q", garten.ParentID)
 	}
-	if r := e.post(admin, "/seiten", url.Values{"title": {"Neu"}, "body": {"n"}, "parent": {"nicht-hex"}}); r.StatusCode != http.StatusBadRequest {
+	if r := e.post(admin, "/seiten", url.Values{"read": {"all"}, "write": {"all"}, "title": {"Neu"}, "body": {"n"}, "parent": {"nicht-hex"}}); r.StatusCode != http.StatusBadRequest {
 		t.Errorf("bad parent: %d", r.StatusCode)
+	}
+}
+
+func TestSeitenRightsOnCreate(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	admin := e.loginAdmin()
+	e.post(admin, "/verwaltung/konten", url.Values{"email": {"kim@example.org"}, "module": {"seiten"}})
+	ctx := context.Background()
+	adminAcc, _ := e.st.Accounts().ByEmail(ctx, adminEmail)
+	kimAcc, _ := e.st.Accounts().ByEmail(ctx, "kim@example.org")
+
+	// The form offers the rights, public by default, without the creator.
+	_, body := e.get(admin, "/seiten/neu")
+	for _, want := range []string{`name="read" value="all" checked`, `name="write" value="all" checked`, `name="reader" value="` + kimAcc.ID + `"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("new form lacks %s", want)
+		}
+	}
+	if strings.Contains(body, `value="`+adminAcc.ID+`"`) {
+		t.Error("creator offered as reader")
+	}
+
+	// Private from the first version on: kim never sees it.
+	r := e.post(admin, "/seiten", url.Values{"title": {"Geheim"}, "body": {"x"}, "read": {"some"}, "write": {"some"}})
+	if r.Header.Get("Location") != "/seiten/geheim" {
+		t.Fatalf("create private: %d %s", r.StatusCode, r.Header.Get("Location"))
+	}
+	p, _ := e.st.Pages().BySlug(ctx, "geheim")
+	if p.ReadAll || p.WriteAll || len(p.Readers)+len(p.Writers) != 0 || p.OwnerID != adminAcc.ID {
+		t.Errorf("private page rights: %+v", p)
+	}
+	if p.CanRead(kimAcc) {
+		t.Error("kim may read a private page")
+	}
+
+	// Read for all, edit for kim only.
+	e.post(admin, "/seiten", url.Values{"title": {"Lesen"}, "body": {"x"}, "read": {"all"}, "write": {"some"}, "writer": {kimAcc.ID}})
+	p, _ = e.st.Pages().BySlug(ctx, "lesen")
+	if !p.ReadAll || p.WriteAll || !slices.Equal(p.Writers, []string{kimAcc.ID}) {
+		t.Errorf("read-all page rights: %+v", p)
+	}
+
+	// Missing or unknown choices are refused, nothing is stored.
+	for name, v := range map[string]url.Values{
+		"no rights":      {"title": {"A"}, "body": {"x"}},
+		"no write":       {"title": {"A"}, "body": {"x"}, "read": {"all"}},
+		"bad read":       {"title": {"A"}, "body": {"x"}, "read": {"jeder"}, "write": {"all"}},
+		"unknown reader": {"title": {"A"}, "body": {"x"}, "read": {"some"}, "write": {"some"}, "reader": {"ff00ff00ff00ff00"}},
+	} {
+		if r := e.post(admin, "/seiten", v); r.StatusCode != http.StatusBadRequest {
+			t.Errorf("%s: %d", name, r.StatusCode)
+		}
+	}
+	if _, err := e.st.Pages().BySlug(ctx, "a"); err == nil {
+		t.Error("refused page stored")
+	}
+
+	// An invalid title keeps the chosen rights and opens them.
+	r, body = e.postBody(admin, "/seiten", url.Values{"title": {""}, "body": {"x"}, "read": {"some"}, "write": {"some"}, "reader": {kimAcc.ID}})
+	if r.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(body, `<details class="rights" open>`) ||
+		!strings.Contains(body, `name="reader" value="`+kimAcc.ID+`" checked`) || !strings.Contains(body, `name="read" value="some" checked`) {
+		t.Errorf("invalid create lost rights: %d", r.StatusCode)
 	}
 }
 
@@ -668,8 +732,8 @@ func TestMermaidCSPAndGzipAsset(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
-	e.post(admin, "/seiten", url.Values{"title": {"Plain"}, "body": {"Hallo"}})
-	e.post(admin, "/seiten", url.Values{"title": {"Diagramm"}, "body": {"```mermaid\ngraph LR; A-->B\n```"}})
+	e.post(admin, "/seiten", url.Values{"read": {"all"}, "write": {"all"}, "title": {"Plain"}, "body": {"Hallo"}})
+	e.post(admin, "/seiten", url.Values{"read": {"all"}, "write": {"all"}, "title": {"Diagramm"}, "body": {"```mermaid\ngraph LR; A-->B\n```"}})
 	r, body := e.get(admin, "/seiten/plain")
 	if strings.Contains(r.Header.Get("Content-Security-Policy"), "unsafe-inline") || strings.Contains(body, "mermaid") {
 		t.Error("plain page relaxed CSP or loads mermaid")
@@ -694,7 +758,7 @@ func TestMarkmapPage(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	admin := e.loginAdmin()
-	e.post(admin, "/seiten", url.Values{"title": {"Ich"}, "body": {"```markmap\n---\nmarkmap:\n  theme: cards\n---\n# Ich\n- ~~Colygon~~\n```"}})
+	e.post(admin, "/seiten", url.Values{"read": {"all"}, "write": {"all"}, "title": {"Ich"}, "body": {"```markmap\n---\nmarkmap:\n  theme: cards\n---\n# Ich\n- ~~Colygon~~\n```"}})
 	r, body := e.get(admin, "/seiten/ich")
 	csp := r.Header.Get("Content-Security-Policy")
 	if !strings.Contains(csp, "style-src 'self' 'unsafe-inline'") || !strings.Contains(csp, "script-src 'self';") {

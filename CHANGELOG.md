@@ -4,6 +4,20 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.14.0] - 2026-11-20
+
+### Added
+
+- Seiten: who may read and edit a new page is chosen right in the form
+  (section *Rechte*, #41). Unchanged, everyone with access to Seiten may
+  read and edit, as before; a private page is never visible to others, not
+  even for its first version.
+
+### Changed
+
+- `POST /seiten` requires the fields `read` and `write` (`all` or `some`),
+  like the rights form; a request without them is refused.
+
 ## [0.13.0] - 2026-11-16
 
 ### Changed

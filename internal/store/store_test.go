@@ -174,11 +174,11 @@ func TestPages(t *testing.T) {
 	_ = s.Accounts().Insert(ctx, other)
 	svc := pages.Service{Repo: s.Pages()}
 
-	p, err := svc.Create(ctx, owner, "", "Einkaufsliste", "- [ ] Milch\n- [ ] Brot\n")
+	p, err := svc.Create(ctx, owner, "", "Einkaufsliste", "- [ ] Milch\n- [ ] Brot\n", pages.Public)
 	if err != nil || p.Slug != "einkaufsliste" {
 		t.Fatalf("create: %+v %v", p, err)
 	}
-	p2, _ := svc.Create(ctx, owner, "", "Einkaufsliste", "")
+	p2, _ := svc.Create(ctx, owner, "", "Einkaufsliste", "", pages.Public)
 	if p2.Slug != "einkaufsliste-2" {
 		t.Fatalf("slug collision: %q", p2.Slug)
 	}
@@ -288,7 +288,7 @@ func TestPageTree(t *testing.T) {
 	svc := pages.Service{Repo: s.Pages()}
 	mk := func(parent, title string) pages.Page {
 		t.Helper()
-		p, err := svc.Create(ctx, owner, parent, title, "")
+		p, err := svc.Create(ctx, owner, parent, title, "", pages.Public)
 		if err != nil {
 			t.Fatalf("create %s: %v", title, err)
 		}
@@ -380,7 +380,7 @@ func TestPageTree(t *testing.T) {
 	if err != nil || len(up) != 0 {
 		t.Fatalf("ancestors leak: %v %v", up, err)
 	}
-	if _, err := svc.Create(ctx, other, priv.ID, "Frech", ""); !errors.Is(err, pages.ErrPlace) {
+	if _, err := svc.Create(ctx, other, priv.ID, "Frech", "", pages.Public); !errors.Is(err, pages.ErrPlace) {
 		t.Fatalf("created below invisible page: %v", err)
 	}
 }

@@ -207,6 +207,8 @@ form.wide { max-width: 860px; }
 textarea { font: 15px/1.5 ui-monospace, Menlo, Consolas, monospace; resize: vertical; }
 label.indent { padding-left: 30px; }
 details > summary { cursor: pointer; font-weight: 600; min-height: 32px; }
+details.rights > .stack { margin-top: 12px; }
+details.rights summary .muted { font-weight: normal; }
 pre.source { white-space: pre-wrap; margin: 0; font: 14px/1.5 ui-monospace, Menlo, Consolas, monospace; }
 .prose { gap: 0; font-size: 17px; line-height: 1.6; overflow-wrap: anywhere; }
 .prose > :first-child { margin-top: 0; }
