@@ -728,6 +728,85 @@ func TestSeitenRightsOnCreate(t *testing.T) {
 	}
 }
 
+// ADR-20261121-page-rights-inheritance in the forms.
+func TestSeitenRightsBelowParent(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	admin := e.loginAdmin()
+	ben, benID := e.agLogin(admin, "ben@example.org", "seiten")
+	mia, miaID := e.agLogin(admin, "mia@example.org", "seiten")
+	ctx := context.Background()
+	follow := func(c *http.Client, r *http.Response) string {
+		t.Helper()
+		_, body := e.get(c, r.Header.Get("Location"))
+		return body
+	}
+
+	// Geschenke: admin and ben.
+	e.post(admin, "/seiten", url.Values{"title": {"Geschenke"}, "body": {"x"}, "read": {"some"}, "write": {"some"}, "reader": {benID}})
+	gifts, _ := e.st.Pages().BySlug(ctx, "geschenke")
+
+	// The subpage form offers only Geschenke's readers, no "everyone", and
+	// starts as wide as allowed.
+	_, body := e.get(ben, "/seiten/neu?unter=geschenke")
+	if strings.Contains(body, `value="all"`) || strings.Contains(body, miaID) || !strings.Contains(body, `<input type="hidden" name="read" value="some">`) {
+		t.Error("subpage form offers more than the parent's readers")
+	}
+	if adminAcc, _ := e.st.Accounts().ByEmail(ctx, adminEmail); !strings.Contains(body, `name="writer" value="`+adminAcc.ID+`" checked`) {
+		t.Error("subpage form does not start as wide as the parent allows")
+	}
+	// A wider request is refused with the narrowest allowed rights to check.
+	r, body := e.postBody(ben, "/seiten", url.Values{"parent": {gifts.ID}, "title": {"Liste"}, "body": {"x"}, "read": {"all"}, "write": {"all"}})
+	if r.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(body, "„Geschenke“ lesen dürfen") {
+		t.Fatalf("wider subpage: %d", r.StatusCode)
+	}
+	r = e.post(ben, "/seiten", url.Values{"parent": {gifts.ID}, "title": {"Liste"}, "body": {"x"}, "read": {"some"}, "write": {"some"}})
+	if r.Header.Get("Location") != "/seiten/liste" {
+		t.Fatalf("subpage: %d", r.StatusCode)
+	}
+	// The rights form of a subpage is limited the same way.
+	if _, body := e.get(ben, "/seiten/liste/rechte"); strings.Contains(body, `value="all"`) || strings.Contains(body, miaID) {
+		t.Error("rights form offers more than the parent's readers")
+	}
+
+	// Narrowing Geschenke would lock ben out of his own Liste: refused.
+	r, body = e.postBody(admin, "/seiten/geschenke/rechte", url.Values{"read": {"some"}, "write": {"some"}})
+	if r.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(body, "Wer eine Unterseite angelegt hat") { // admin may not read Liste: no title
+		t.Fatalf("lock out: %d", r.StatusCode)
+	}
+	// Widening and narrowing again narrows the subpage along and says so.
+	e.post(admin, "/seiten/geschenke/rechte", url.Values{"read": {"all"}, "write": {"all"}})
+	e.post(ben, "/seiten/liste/rechte", url.Values{"read": {"all"}, "write": {"all"}})
+	r = e.post(admin, "/seiten/geschenke/rechte", url.Values{"read": {"some"}, "write": {"some"}, "reader": {benID}})
+	if body := follow(admin, r); !strings.Contains(body, "Angepasst") || !strings.Contains(body, "„Liste“") {
+		t.Error("narrowed subpage not reported")
+	}
+	if p, _ := e.st.Pages().BySlug(ctx, "liste"); p.ReadAll || p.Audience().Has(miaID) {
+		t.Errorf("subpage not narrowed: %+v", p)
+	}
+
+	// Moving a public page below Geschenke narrows it, for its owner only.
+	e.post(ben, "/seiten", url.Values{"title": {"Offen"}, "body": {"x"}, "read": {"all"}, "write": {"all"}})
+	r = e.post(ben, "/seiten/offen/verschieben", url.Values{"ziel": {gifts.ID + "/"}, "zurueck": {"seite"}})
+	if body := follow(ben, r); r.Header.Get("Location") != "/seiten/offen" || !strings.Contains(body, "Verschoben.") || !strings.Contains(body, "Angepasst") {
+		t.Errorf("move by owner: %s", r.Header.Get("Location"))
+	}
+	if p, _ := e.st.Pages().BySlug(ctx, "offen"); p.ParentID != gifts.ID || p.ReadAll || p.Audience().Has(miaID) {
+		t.Errorf("moved page not narrowed: %+v", p)
+	}
+	// Someone who may only edit the page cannot narrow it by moving.
+	e.post(ben, "/seiten/offen/verschieben", url.Values{"ziel": {"/"}, "zurueck": {"seite"}})
+	e.post(ben, "/seiten/offen/rechte", url.Values{"read": {"all"}, "write": {"all"}})
+	e.post(admin, "/seiten/geschenke/rechte", url.Values{"read": {"some"}, "write": {"some"}, "reader": {benID, miaID}})
+	r = e.post(mia, "/seiten/offen/verschieben", url.Values{"ziel": {gifts.ID + "/"}, "zurueck": {"seite"}})
+	if body := follow(mia, r); !strings.Contains(body, "Das darf nur, wer sie angelegt hat.") {
+		t.Error("move by editor not explained")
+	}
+	if p, _ := e.st.Pages().BySlug(ctx, "offen"); p.ParentID != "" || !p.ReadAll {
+		t.Errorf("editor narrowed by moving: %+v", p)
+	}
+}
+
 func TestMermaidCSPAndGzipAsset(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)

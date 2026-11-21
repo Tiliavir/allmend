@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -194,13 +195,13 @@ func TestPages(t *testing.T) {
 		t.Fatalf("stale save: %v", err)
 	}
 	// Private page: other loses access, page looks not found.
-	if _, err := svc.SetRights(ctx, owner, p.Slug, pages.Rights{}); err != nil {
+	if _, _, err := svc.SetRights(ctx, owner, p.Slug, pages.Rights{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.Get(ctx, other, p.Slug); !errors.Is(err, pages.ErrNotFound) {
 		t.Fatalf("private page visible: %v", err)
 	}
-	if _, err := svc.SetRights(ctx, owner, p.Slug, pages.Rights{Readers: []string{"x"}}); err != nil {
+	if _, _, err := svc.SetRights(ctx, owner, p.Slug, pages.Rights{Readers: []string{"x"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.Toggle(ctx, other, p.Slug, 3, 0, "Milch"); !errors.Is(err, pages.ErrForbidden) {
@@ -321,14 +322,14 @@ func TestPageTree(t *testing.T) {
 		t.Fatalf("tree: %s", got)
 	}
 	// Reorder: C before A.
-	if _, err := svc.Move(ctx, owner, c.Slug, "", a.ID); err != nil {
+	if _, _, err := svc.Move(ctx, owner, c.Slug, "", a.ID); err != nil {
 		t.Fatal(err)
 	}
 	if got := tree(); got != "C,A,-A1,-A2,B" {
 		t.Fatalf("reorder: %s", got)
 	}
 	// Reparent: B below A, before A1.
-	if _, err := svc.Move(ctx, owner, b.Slug, a.ID, a1.ID); err != nil {
+	if _, _, err := svc.Move(ctx, owner, b.Slug, a.ID, a1.ID); err != nil {
 		t.Fatal(err)
 	}
 	if got := tree(); got != "C,A,-B,-A1,-A2" {
@@ -342,7 +343,7 @@ func TestPageTree(t *testing.T) {
 		"before non-child": {a1.Slug, a.ID, c.ID},
 		"before itself":    {a1.Slug, a.ID, a1.ID},
 	} {
-		if _, err := svc.Move(ctx, owner, args[0], args[1], args[2]); !errors.Is(err, pages.ErrPlace) {
+		if _, _, err := svc.Move(ctx, owner, args[0], args[1], args[2]); !errors.Is(err, pages.ErrPlace) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
@@ -350,10 +351,10 @@ func TestPageTree(t *testing.T) {
 		t.Fatalf("after rejected moves: %s", got)
 	}
 	// Only people who may edit can move.
-	if _, err := svc.SetRights(ctx, owner, a1.Slug, pages.Rights{ReadAll: true}); err != nil {
+	if _, _, err := svc.SetRights(ctx, owner, a1.Slug, pages.Rights{ReadAll: true}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Move(ctx, other, a1.Slug, "", ""); !errors.Is(err, pages.ErrForbidden) {
+	if _, _, err := svc.Move(ctx, other, a1.Slug, "", ""); !errors.Is(err, pages.ErrForbidden) {
 		t.Fatalf("reader moved: %v", err)
 	}
 	// Deleting a page hands its children to its parent, in order, last.
@@ -363,18 +364,31 @@ func TestPageTree(t *testing.T) {
 	if got := tree(); got != "C,B,A1,A2" {
 		t.Fatalf("delete: %s", got)
 	}
-	// A page below a page the reader may not see shows at the top level.
+	// Narrowing a page narrows its subpages: the reader sees neither.
 	priv := mk("", "Privat")
 	kid := mk(priv.ID, "Kind")
-	if _, err := svc.SetRights(ctx, owner, priv.Slug, pages.Rights{}); err != nil {
-		t.Fatal(err)
+	_, changed, err := svc.SetRights(ctx, owner, priv.Slug, pages.Rights{})
+	if err != nil || len(changed) != 1 || changed[0].ID != kid.ID {
+		t.Fatalf("narrow parent: %v %v", changed, err)
 	}
 	ns, err := svc.Tree(ctx, other)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := order(ns); !strings.Contains(got, "Kind") || strings.Contains(got, "Privat") || strings.Contains(got, "-Kind") {
+	if got := order(ns); strings.Contains(got, "Kind") || strings.Contains(got, "Privat") {
 		t.Fatalf("hidden parent: %s", got)
+	}
+	// Should stored rights ever break the rule, the page shows at the top
+	// level and the hidden parent stays hidden.
+	kid.ReadAll = true
+	if err := s.Pages().SetRights(ctx, kid); err != nil {
+		t.Fatal(err)
+	}
+	if ns, err = svc.Tree(ctx, other); err != nil {
+		t.Fatal(err)
+	}
+	if got := order(ns); !strings.Contains(got, "Kind") || strings.Contains(got, "Privat") || strings.Contains(got, "-Kind") {
+		t.Fatalf("fallback: %s", got)
 	}
 	up, err := svc.Ancestors(ctx, other, kid)
 	if err != nil || len(up) != 0 {
@@ -382,6 +396,147 @@ func TestPageTree(t *testing.T) {
 	}
 	if _, err := svc.Create(ctx, other, priv.ID, "Frech", "", pages.Public); !errors.Is(err, pages.ErrPlace) {
 		t.Fatalf("created below invisible page: %v", err)
+	}
+}
+
+// ADR-20261121-page-rights-inheritance: a subpage is never readable by more
+// people than its parent.
+func TestPageRightsInheritance(t *testing.T) {
+	t.Parallel()
+	s, _ := open(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	acc := func(id string, admin bool) account.Account {
+		a := account.Account{ID: id, Email: id + "@example.org", IsAdmin: admin, Status: account.Active, Theme: account.ThemeAuto, CreatedAt: now, UpdatedAt: now}
+		if err := s.Accounts().Insert(ctx, a); err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+	anna, ben, mia := acc("anna", true), acc("ben", false), acc("mia", false)
+	svc := pages.Service{Repo: s.Pages()}
+	get := func(slug string) pages.Page {
+		t.Helper()
+		p, err := s.Pages().BySlug(ctx, slug)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	audience := func(p pages.Page) string {
+		x := p.Audience()
+		if x.All {
+			return "all"
+		}
+		var ids []string
+		for id := range x.IDs {
+			ids = append(ids, id)
+		}
+		slices.Sort(ids)
+		return strings.Join(ids, ",")
+	}
+
+	// Geschenke: anna and ben read, ben edits.
+	gifts, err := svc.Create(ctx, anna, "", "Geschenke", "", pages.Rights{Readers: []string{ben.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A new subpage starts as wide as the parent allows, and no wider.
+	if r := gifts.ChildRights(ben.ID); r.ReadAll || r.WriteAll || !slices.Equal(r.Writers, []string{anna.ID}) {
+		t.Fatalf("child rights: %+v", r)
+	}
+	if _, err := svc.Create(ctx, ben, gifts.ID, "Offen", "", pages.Public); !errors.Is(err, pages.ErrWider) {
+		t.Fatalf("public below private: %v", err)
+	}
+	if _, err := svc.Create(ctx, ben, gifts.ID, "Mia", "", pages.Rights{Readers: []string{mia.ID}}); !errors.Is(err, pages.ErrWider) {
+		t.Fatalf("extra reader below private: %v", err)
+	}
+	wish, err := svc.Create(ctx, ben, gifts.ID, "Wunschliste", "", gifts.ChildRights(ben.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ideas, err := svc.Create(ctx, anna, wish.ID, "Ideen", "", wish.ChildRights(anna.ID))
+	if err != nil || audience(ideas) != "anna,ben" {
+		t.Fatalf("grandchild: %v %s", err, audience(ideas))
+	}
+	// The page itself may not get wider than its parent.
+	if _, _, err := svc.SetRights(ctx, ben, wish.Slug, pages.Public); !errors.Is(err, pages.ErrWider) {
+		t.Fatalf("widen subpage: %v", err)
+	}
+
+	// Narrowing Geschenke to anna alone would lock ben out of his own
+	// Wunschliste: refused, nothing changes.
+	_, _, err = svc.SetRights(ctx, anna, gifts.Slug, pages.Rights{})
+	var locked *pages.LockedError
+	if !errors.As(err, &locked) || len(locked.Pages) != 1 || locked.Pages[0].ID != wish.ID {
+		t.Fatalf("lock out owner: %v", err)
+	}
+	if audience(get(gifts.Slug)) != "anna,ben" {
+		t.Fatal("refused narrowing stored")
+	}
+
+	// Widening the parent leaves subpages as they are; narrowing it again
+	// narrows them, down the whole branch, in one go.
+	if _, ch, err := svc.SetRights(ctx, anna, gifts.Slug, pages.Rights{Readers: []string{ben.ID, mia.ID}}); err != nil || len(ch) != 0 {
+		t.Fatalf("widen parent: %v %v", ch, err)
+	}
+	if _, _, err := svc.SetRights(ctx, ben, wish.Slug, pages.Rights{Readers: []string{anna.ID, mia.ID}, Writers: []string{anna.ID}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.SetRights(ctx, anna, ideas.Slug, pages.Rights{Writers: []string{ben.ID, mia.ID}}); err != nil {
+		t.Fatal(err)
+	}
+	_, ch, err := svc.SetRights(ctx, anna, gifts.Slug, pages.Rights{Readers: []string{ben.ID}})
+	if err != nil || len(ch) != 2 {
+		t.Fatalf("narrow branch: %v %v", ch, err)
+	}
+	if w := get(wish.Slug); audience(w) != "anna,ben" || !slices.Equal(w.Writers, []string{anna.ID}) {
+		t.Fatalf("wish narrowed: %+v", w)
+	}
+	if i := get(ideas.Slug); audience(i) != "anna,ben" || !slices.Equal(i.Writers, []string{ben.ID}) {
+		t.Fatalf("ideas narrowed: %+v", i)
+	}
+
+	// Moving below a narrower page narrows the moved branch. Only the
+	// owner may; anyone who may edit can still move within the same rights.
+	open1, err := svc.Create(ctx, mia, "", "Offen", "", pages.Public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Create(ctx, ben, open1.ID, "Offen Kind", "", pages.Public); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.Move(ctx, mia, open1.Slug, gifts.ID, ""); !errors.Is(err, pages.ErrPlace) {
+		t.Fatalf("mia moved below a page she cannot read: %v", err)
+	}
+	if _, _, err := svc.Move(ctx, ben, open1.Slug, gifts.ID, ""); !errors.As(err, &locked) {
+		t.Fatalf("move locks mia out of her page: %v", err)
+	}
+	if _, _, err := svc.SetRights(ctx, anna, gifts.Slug, pages.Rights{Readers: []string{ben.ID, mia.ID}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.Move(ctx, ben, open1.Slug, gifts.ID, ""); !errors.Is(err, pages.ErrManage) {
+		t.Fatalf("writer narrowed by moving: %v", err)
+	}
+	moved, ch, err := svc.Move(ctx, mia, open1.Slug, gifts.ID, "")
+	if err != nil || len(ch) != 2 || moved.ParentID != gifts.ID {
+		t.Fatalf("move narrows: %v %v", ch, err)
+	}
+	for _, slug := range []string{"offen", "offen-kind"} {
+		if got := audience(get(slug)); got != "anna,ben,mia" {
+			t.Errorf("%s after move: %s", slug, got)
+		}
+	}
+	// A move that would lock an owner out is refused.
+	solo, err := svc.Create(ctx, anna, "", "Nur Anna", "", pages.Rights{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.Move(ctx, anna, open1.Slug, solo.ID, ""); !errors.As(err, &locked) {
+		t.Fatalf("move locks out owners: %v", err)
+	}
+	if get(open1.Slug).ParentID != gifts.ID {
+		t.Fatal("refused move stored")
 	}
 }
 

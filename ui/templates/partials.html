@@ -66,7 +66,17 @@
 <a href="/orte/karte"{{if eq . "heat"}} aria-current="page"{{end}}>Karte</a>
 </nav>{{end}}
 {{define "range"}}{{if .MissingRange}}<span class="bad">Zeitraum fehlt</span>{{else}}{{dateDE .DateFrom}} – {{dateDE .DateTo}}{{end}}{{end}}
-{{define "seitenrechte"}}<fieldset><legend>Lesen</legend>
+{{define "seitenrechte"}}{{if .Limited}}<input type="hidden" name="read" value="some"><input type="hidden" name="write" value="some">
+<p class="hint">Eine Unterseite dürfen höchstens die Leute lesen, die {{if .LimitTitle}}„{{.LimitTitle}}“{{else}}die Seite darüber{{end}} lesen dürfen. Zur Auswahl stehen nur sie.</p>
+<fieldset><legend>Lesen</legend>
+{{range .Candidates}}<label class="check"><input type="checkbox" name="reader" value="{{.ID}}"{{if index $.Readers .ID}} checked{{end}}>{{.DisplayName}}</label>
+{{else}}<p class="muted">Niemand außer dir.</p>
+{{end}}</fieldset>
+<fieldset><legend>Bearbeiten</legend>
+{{range .Candidates}}<label class="check"><input type="checkbox" name="writer" value="{{.ID}}"{{if index $.Writers .ID}} checked{{end}}>{{.DisplayName}}</label>
+{{else}}<p class="muted">Niemand außer dir.</p>
+{{end}}</fieldset>
+{{else}}<fieldset><legend>Lesen</legend>
 <label class="check"><input type="radio" name="read" value="all"{{if .ReadAll}} checked{{end}}>Alle mit Zugriff auf Seiten</label>
 <label class="check"><input type="radio" name="read" value="some"{{if not .ReadAll}} checked{{end}}>Nur ausgewählte:</label>
 {{range .Candidates}}<label class="check indent"><input type="checkbox" name="reader" value="{{.ID}}"{{if index $.Readers .ID}} checked{{end}}>{{.DisplayName}}</label>
@@ -76,4 +86,4 @@
 <label class="check"><input type="radio" name="write" value="some"{{if not .WriteAll}} checked{{end}}>Nur ausgewählte:</label>
 {{range .Candidates}}<label class="check indent"><input type="checkbox" name="writer" value="{{.ID}}"{{if index $.Writers .ID}} checked{{end}}>{{.DisplayName}}</label>
 {{end}}</fieldset>
-<p class="hint">Wer bearbeiten darf, darf auch lesen.</p>{{end}}
+{{end}}<p class="hint">Wer bearbeiten darf, darf auch lesen. Unterseiten mit mehr Lesern werden beim Speichern angepasst.</p>{{end}}

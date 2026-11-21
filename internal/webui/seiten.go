@@ -135,6 +135,12 @@ func (s *Server) seitenList(w http.ResponseWriter, r *http.Request, a account.Ac
 
 func (s *Server) seitenNew(w http.ResponseWriter, r *http.Request, a account.Account) {
 	d := seitenData{}
+	_, all, err := s.names(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	d.Rights = newRightsForm(pages.Public, a.ID, all, nil, a)
 	if slug := r.URL.Query().Get("unter"); slug != "" {
 		p, err := s.Pages.Get(r.Context(), a, slug)
 		if err != nil {
@@ -142,13 +148,8 @@ func (s *Server) seitenNew(w http.ResponseWriter, r *http.Request, a account.Acc
 			return
 		}
 		d.Parent = &p
+		d.Rights = newRightsForm(p.ChildRights(a.ID), a.ID, all, &p, a)
 	}
-	_, all, err := s.names(r)
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	d.Rights = newRightsForm(pages.Public, a.ID, all)
 	s.render(w, r, http.StatusOK, "seiten/edit", Page{Title: "Neue Seite", Module: account.Seiten, Data: d})
 }
 
@@ -157,8 +158,8 @@ func (s *Server) seitenCreate(w http.ResponseWriter, r *http.Request, a account.
 		s.status(w, r, http.StatusBadRequest)
 		return
 	}
-	parent := r.PostForm.Get("parent")
-	if !pageID(parent) {
+	parentID := r.PostForm.Get("parent")
+	if !pageID(parentID) {
 		s.status(w, r, http.StatusBadRequest)
 		return
 	}
@@ -174,26 +175,42 @@ func (s *Server) seitenCreate(w http.ResponseWriter, r *http.Request, a account.
 	}
 	title, body := r.PostForm.Get("title"), r.PostForm.Get("body")
 	again := func(msg string, parent *pages.Page) {
-		d := seitenData{Title: title, Body: body, Parent: parent, Rights: newRightsForm(rights, a.ID, all)}
+		d := seitenData{Title: title, Body: body, Parent: parent, Rights: newRightsForm(rights, a.ID, all, parent, a)}
 		s.render(w, r, http.StatusUnprocessableEntity, "seiten/edit", Page{Title: "Neue Seite", Module: account.Seiten,
 			Error: msg, Data: d})
 	}
-	p, err := s.Pages.Create(r.Context(), a, parent, title, body, rights)
+	var parent *pages.Page
+	if parentID != "" {
+		pp, err := s.Pages.ByID(r.Context(), a, parentID)
+		switch {
+		case errors.Is(err, pages.ErrPlace):
+			rights = pages.Public
+			again(parentGone, nil)
+			return
+		case err != nil:
+			s.fail(w, r, err)
+			return
+		}
+		parent = &pp
+	}
+	p, err := s.Pages.Create(r.Context(), a, parentID, title, body, rights)
 	switch {
 	case errors.Is(err, pages.ErrInvalid):
-		var keep *pages.Page
-		if parent != "" {
-			keep = &pages.Page{ID: parent}
-		}
-		again(invalidPage, keep)
+		again(invalidPage, parent)
+	case errors.Is(err, pages.ErrWider):
+		rights = parent.ChildRights(a.ID)
+		again("Eine Unterseite dürfen höchstens die Leute lesen, die auch „"+parent.Title+"“ lesen dürfen. Prüfe die Rechte und speichere nochmals.", parent)
 	case errors.Is(err, pages.ErrPlace):
-		again("Die übergeordnete Seite gibt es nicht mehr. Die neue Seite kommt nach oben, wenn du nochmals speicherst.", nil)
+		rights = pages.Public
+		again(parentGone, nil)
 	case err != nil:
 		s.fail(w, r, err)
 	default:
 		s.redirect(w, r, "/seiten/"+p.Slug, "Seite angelegt.")
 	}
 }
+
+const parentGone = "Die übergeordnete Seite gibt es nicht mehr. Die neue Seite kommt nach oben, wenn du nochmals speicherst."
 
 var invalidPage = fmt.Sprintf("Titel fehlt oder ist länger als %d Zeichen, oder der Text ist zu lang.", pages.MaxTitle)
 
@@ -317,14 +334,28 @@ func (s *Server) seitenRights(w http.ResponseWriter, r *http.Request, a account.
 		s.status(w, r, http.StatusForbidden)
 		return
 	}
+	s.rightsPage(w, r, a, p, http.StatusOK, "")
+}
+
+// rightsPage renders the rights form of p, with its current rights.
+func (s *Server) rightsPage(w http.ResponseWriter, r *http.Request, a account.Account, p pages.Page, status int, msg string) {
 	names, all, err := s.names(r)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
+	var limit *pages.Page
+	parent, err := s.Pages.Parent(r.Context(), p)
+	switch {
+	case err == nil:
+		limit = &parent
+	case !errors.Is(err, pages.ErrNotFound):
+		s.fail(w, r, err)
+		return
+	}
 	d := seitenData{Page: p, Owner: names[p.OwnerID],
-		Rights: newRightsForm(pages.Rights{ReadAll: p.ReadAll, WriteAll: p.WriteAll, Readers: p.Readers, Writers: p.Writers}, p.OwnerID, all)}
-	s.render(w, r, http.StatusOK, "seiten/rights", Page{Title: "Rechte: " + p.Title, Module: account.Seiten, Data: d})
+		Rights: newRightsForm(pages.Rights{ReadAll: p.ReadAll, WriteAll: p.WriteAll, Readers: p.Readers, Writers: p.Writers}, p.OwnerID, all, limit, a)}
+	s.render(w, r, status, "seiten/rights", Page{Title: "Rechte: " + p.Title, Module: account.Seiten, Error: msg, Data: d})
 }
 
 func (s *Server) seitenRightsSave(w http.ResponseWriter, r *http.Request, a account.Account) {
@@ -342,12 +373,62 @@ func (s *Server) seitenRightsSave(w http.ResponseWriter, r *http.Request, a acco
 		s.status(w, r, http.StatusBadRequest)
 		return
 	}
-	p, err := s.Pages.SetRights(r.Context(), a, r.PathValue("slug"), rights)
-	if err != nil {
+	p, changed, err := s.Pages.SetRights(r.Context(), a, r.PathValue("slug"), rights)
+	var locked *pages.LockedError
+	switch {
+	case errors.Is(err, pages.ErrWider):
+		s.rightsPage(w, r, a, p, http.StatusUnprocessableEntity, "Diese Seite dürfen höchstens die Leute lesen, die auch die übergeordnete Seite lesen dürfen. Die Liste hat sich vielleicht inzwischen geändert.")
+		return
+	case errors.As(err, &locked):
+		s.rightsPage(w, r, a, p, http.StatusUnprocessableEntity, lockedMessage(a, locked))
+		return
+	case err != nil:
 		s.pageError(w, r, err)
 		return
 	}
-	s.redirect(w, r, "/seiten/"+p.Slug, "Rechte gespeichert.")
+	s.redirect(w, r, "/seiten/"+p.Slug, "Rechte gespeichert."+narrowedMessage(a, changed))
+}
+
+// lockedMessage explains a refused narrowing without naming pages a may not read.
+func lockedMessage(a account.Account, e *pages.LockedError) string {
+	return "Das geht nicht: Wer " + titles(a, e.Pages, "Unterseite", "Unterseiten") +
+		" angelegt hat, dürfte die eigene Seite dann nicht mehr lesen. Gib diesen Personen Leserechte oder verschiebe die Unterseiten zuerst."
+}
+
+// narrowedMessage names the pages whose rights were narrowed along, if any.
+func narrowedMessage(a account.Account, changed []pages.Page) string {
+	if len(changed) == 0 {
+		return ""
+	}
+	return " Angepasst, damit sie nicht mehr Leute lesen als die Seite darüber: " + titles(a, changed, "Unterseite", "Unterseiten") + "."
+}
+
+// titles lists the titles of the pages a may read and counts the others.
+func titles(a account.Account, ps []pages.Page, one, many string) string {
+	var names []string
+	hidden := 0
+	for _, p := range ps {
+		if p.CanRead(a) {
+			names = append(names, "„"+p.Title+"“")
+		} else {
+			hidden++
+		}
+	}
+	switch {
+	case hidden == 0:
+	case len(names) == 0 && hidden == 1:
+		names = append(names, "eine "+one)
+	case len(names) == 0:
+		names = append(names, strconv.Itoa(hidden)+" "+many)
+	case hidden == 1:
+		names = append(names, "eine weitere "+one)
+	default:
+		names = append(names, strconv.Itoa(hidden)+" weitere "+many)
+	}
+	if len(names) == 1 {
+		return names[0]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " und " + names[len(names)-1]
 }
 
 // rightsForm fills the read/edit fieldsets ("seitenrechte" in partials.html).
@@ -355,12 +436,26 @@ type rightsForm struct {
 	ReadAll, WriteAll bool
 	Readers, Writers  map[string]bool
 	Candidates        []account.Account // everyone who may get rights, without the owner
+	Limited           bool              // below a page not everyone may read: only its readers
+	LimitTitle        string            // that page's title, if the viewer may read it
 }
 
-func newRightsForm(r pages.Rights, owner string, all []account.Account) rightsForm {
+// newRightsForm offers rights for a page owned by owner below limit (nil for
+// the top level), shown to viewer.
+func newRightsForm(r pages.Rights, owner string, all []account.Account, limit *pages.Page, viewer account.Account) rightsForm {
 	f := rightsForm{ReadAll: r.ReadAll || r.WriteAll, WriteAll: r.WriteAll, Readers: set(r.Readers), Writers: set(r.Writers)}
+	aud := pages.Audience{All: true}
+	if limit != nil {
+		aud = limit.Audience()
+		if limit.CanRead(viewer) {
+			f.LimitTitle = limit.Title
+		}
+	}
+	if !aud.All {
+		f.Limited, f.ReadAll, f.WriteAll = true, false, false
+	}
 	for _, c := range all {
-		if c.ID != owner && c.Can(account.Seiten) && c.Status != account.Disabled {
+		if c.ID != owner && c.Can(account.Seiten) && c.Status != account.Disabled && aud.Has(c.ID) {
 			f.Candidates = append(f.Candidates, c)
 		}
 	}
@@ -572,18 +667,26 @@ func (s *Server) seitenMoveSave(w http.ResponseWriter, r *http.Request, a accoun
 		s.status(w, r, http.StatusBadRequest)
 		return
 	}
-	p, err := s.Pages.Move(r.Context(), a, slug, parent, before)
+	p, changed, err := s.Pages.Move(r.Context(), a, slug, parent, before)
+	var locked *pages.LockedError
 	switch {
 	case errors.Is(err, pages.ErrPlace):
 		s.redirect(w, r, "/seiten", "Dorthin lässt sich die Seite nicht verschieben – die Liste hat sich vielleicht inzwischen geändert.")
+		return
+	case errors.Is(err, pages.ErrManage):
+		s.redirect(w, r, "/seiten/"+slug, "Dort dürften weniger Leute die Seite lesen. Das darf nur, wer sie angelegt hat.")
+		return
+	case errors.As(err, &locked):
+		s.redirect(w, r, "/seiten/"+slug, "Nicht verschoben: "+lockedMessage(a, locked))
 		return
 	case err != nil:
 		s.pageError(w, r, err)
 		return
 	}
+	msg := strings.TrimSpace(narrowedMessage(a, changed))
 	if back == "liste" {
-		s.redirect(w, r, "/seiten#seite-"+p.ID, "")
+		s.redirect(w, r, "/seiten#seite-"+p.ID, msg)
 		return
 	}
-	s.redirect(w, r, "/seiten/"+p.Slug, "Verschoben.")
+	s.redirect(w, r, "/seiten/"+p.Slug, strings.TrimSpace("Verschoben. "+msg))
 }

@@ -195,25 +195,38 @@ func (r *Pages) Update(ctx context.Context, p pages.Page, want int) error {
 	return tx.Commit()
 }
 
-// SetRights replaces the access lists.
-func (r *Pages) SetRights(ctx context.Context, p pages.Page) error {
+// SetRights replaces the access lists of all ps in one transaction.
+func (r *Pages) SetRights(ctx context.Context, ps ...pages.Page) error {
 	tx, err := r.s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `UPDATE pages SET read_all=?, write_all=? WHERE id=?`, b2i(p.ReadAll), b2i(p.WriteAll), p.ID); err != nil {
-		return fmt.Errorf("store.Pages.SetRights: %w", err)
-	}
-	if err := writeAccess(ctx, tx, p); err != nil {
-		return fmt.Errorf("store.Pages.SetRights access: %w", err)
+	if err := setRights(ctx, tx, ps); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
 
-// Move places a page below parentID, right before beforeID ("" = last), and
-// renumbers the siblings.
-func (r *Pages) Move(ctx context.Context, pageID, parentID, beforeID string) error {
+func setRights(ctx context.Context, tx *sql.Tx, ps []pages.Page) error {
+	for _, p := range ps {
+		res, err := tx.ExecContext(ctx, `UPDATE pages SET read_all=?, write_all=? WHERE id=? AND deleted_at IS NULL`, b2i(p.ReadAll), b2i(p.WriteAll), p.ID)
+		if err != nil {
+			return fmt.Errorf("store.Pages.SetRights: %w", err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return pages.ErrNotFound
+		}
+		if err := writeAccess(ctx, tx, p); err != nil {
+			return fmt.Errorf("store.Pages.SetRights access: %w", err)
+		}
+	}
+	return nil
+}
+
+// Move places a page below parentID, right before beforeID ("" = last),
+// renumbers the siblings and stores the rights of the pages in rights.
+func (r *Pages) Move(ctx context.Context, pageID, parentID, beforeID string, rights []pages.Page) error {
 	tx, err := r.s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -274,6 +287,9 @@ WITH RECURSIVE up(id) AS (
 		if _, err := tx.ExecContext(ctx, `UPDATE pages SET position = ? WHERE id = ?`, i, id); err != nil {
 			return fmt.Errorf("store.Pages.Move position: %w", err)
 		}
+	}
+	if err := setRights(ctx, tx, rights); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
