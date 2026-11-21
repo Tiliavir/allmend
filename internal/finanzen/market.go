@@ -118,9 +118,14 @@ func (r *Refresher) Run(ctx context.Context) Run {
 		}
 	}
 	// Profiles change slowly: refresh the oldest with what is left of the budget.
+	// Stocks are skipped: a stock is its own composition, and the provider
+	// offers their overview only on a paid plan.
 	for _, s := range syms {
 		if calls >= budget {
 			break
+		}
+		if s.Kind == Stock {
+			continue
 		}
 		p, err := r.Market.Profile(ctx, s.Symbol)
 		if err == nil && r.now().Sub(p.FetchedAt) < r.ProfileAge {

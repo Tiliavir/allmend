@@ -179,6 +179,13 @@ func TestRefresherBudgetAndErrors(t *testing.T) {
 	if run.OK || !strings.Contains(run.Message, "BAD: HTTP 500") || len(m.rates) != 1 || len(m.prices["A"]) != 1 {
 		t.Fatalf("%+v", run)
 	}
+	// Stocks get prices but no composition, even with budget left.
+	m3 := &fakeMarket{syms: []SymbolUse{{"S", Stock}, {"E", ETF}}, profiles: map[string]Profile{}}
+	q3 := &fakeQuotes{}
+	run = (&Refresher{Market: m3, Quotes: q3, Rates: fakeRates{}, Base: "EUR", Budget: 25, ProfileAge: 24 * time.Hour}).Run(context.Background())
+	if got := strings.Join(q3.calls, ","); got != "daily S,daily E,profile E" || !run.OK {
+		t.Fatalf("calls %s, run %+v", got, run)
+	}
 	// Without a key: rates only, and the run says why.
 	m2 := &fakeMarket{syms: []SymbolUse{{"A", ETF}}}
 	run = (&Refresher{Market: m2, Rates: fakeRates{}, Base: "EUR"}).Run(context.Background())
