@@ -24,7 +24,7 @@ flowchart LR
 | `internal/offline` | Remembers outbox entries the server applied, so a replay never applies twice. |
 | `internal/pages`, `commute`, `velo`, `schiffe`, `places`, `ausgaben` | One package per module: types, rules, services, repository interface. |
 | `internal/finanzen` | Finances: assets, securities, transactions, dividends, yearly snapshots; calculations; the daily market data refresh. |
-| `internal/quotes` | HTTP adapters for market data: Alpha Vantage (prices, fund profiles), Frankfurter (exchange rates). Strict parsing. |
+| `internal/quotes` | HTTP adapters for market data: Alpha Vantage (prices, fund profiles), EODHD (prices of SIX titles, `.SW`), Frankfurter (exchange rates). Strict parsing. |
 | `internal/store` | SQLite repositories; only `cmd` and tests import it. |
 | `internal/webui` | Routes, middleware (CSP, cross-origin protection, auth), handlers. |
 | `ui` | Embedded templates and static files, incl. the service worker `sw.js` (see chapter 8, Offline). |

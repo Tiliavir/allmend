@@ -159,6 +159,13 @@ func (q *fakeQuotes) Profile(_ context.Context, s, _ string) ([]Weight, error) {
 	return []Weight{{Sector, "Tech", 1}}, nil
 }
 
+type fakeSIX struct{ calls []string }
+
+func (q *fakeSIX) DailySince(_ context.Context, s, from string) ([]Price, error) {
+	q.calls = append(q.calls, s+" from "+from)
+	return []Price{{"2026-11-20", 263.4}}, nil
+}
+
 type fakeRates struct{}
 
 func (fakeRates) Latest(_ context.Context, c, b string) (Rate, error) {
@@ -185,6 +192,30 @@ func TestRefresherBudgetAndErrors(t *testing.T) {
 	run = (&Refresher{Market: m3, Quotes: q3, Rates: fakeRates{}, Base: "EUR", Budget: 25, ProfileAge: 24 * time.Hour}).Run(context.Background())
 	if got := strings.Join(q3.calls, ","); got != "daily S,daily E,profile E" || !run.OK {
 		t.Fatalf("calls %s, run %+v", got, run)
+	}
+	// .SW goes to the SIX source with its own budget: a year of history for a
+	// new symbol, from the last stored close otherwise; never to Quotes.
+	now := time.Date(2026, 11, 21, 4, 0, 0, 0, time.UTC)
+	m4 := &fakeMarket{syms: []SymbolUse{{"RO.SW", Stock}, {"VWCE.DE", ETF}, {"STMN.SW", Stock}, {"XSMC.SW", ETF}},
+		prices: map[string][]Price{"STMN.SW": {{"2026-11-18", 100}, {"2026-11-19", 101}}}, profiles: map[string]Profile{}}
+	q4, s4 := &fakeQuotes{}, &fakeSIX{}
+	run = (&Refresher{Market: m4, Quotes: q4, SIX: s4, Rates: fakeRates{}, Base: "EUR", Budget: 2, SIXBudget: 2,
+		ProfileAge: 24 * time.Hour, Now: func() time.Time { return now }}).Run(context.Background())
+	if got := strings.Join(q4.calls, ","); got != "daily VWCE.DE,profile VWCE.DE" {
+		t.Fatalf("quotes calls %s", got)
+	}
+	if got := strings.Join(s4.calls, ","); got != "RO.SW from 2025-11-21,STMN.SW from 2026-11-19" {
+		t.Fatalf("six calls %s", got)
+	}
+	if run.OK || !strings.Contains(run.Message, "3 SIX-Kurssymbole, aber nur 2 EODHD-Abfragen") {
+		t.Fatalf("%+v", run)
+	}
+	// Without an EODHD key: no SIX prices, the run says why, Quotes untouched.
+	m5 := &fakeMarket{syms: []SymbolUse{{"RO.SW", Stock}, {"A", ETF}}, profiles: map[string]Profile{"A": {Symbol: "A", FetchedAt: time.Now()}}}
+	q5 := &fakeQuotes{}
+	run = (&Refresher{Market: m5, Quotes: q5, Rates: fakeRates{}, Base: "EUR", ProfileAge: 24 * time.Hour}).Run(context.Background())
+	if run.OK || !strings.Contains(run.Message, "ALLMEND_EODHD_KEY") || strings.Join(q5.calls, ",") != "daily A" {
+		t.Fatalf("calls %v, run %+v", q5.calls, run)
 	}
 	// Without a key: rates only, and the run says why.
 	m2 := &fakeMarket{syms: []SymbolUse{{"A", ETF}}}

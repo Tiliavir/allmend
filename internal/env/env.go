@@ -29,6 +29,7 @@ type Config struct {
 	BaseCurrency string // ISO 4217, default EUR
 
 	AlphaVantageKey string
+	EODHDKey        string // SIX prices (ADR six-prices-eodhd)
 	FrankfurterURL  string
 
 	// AppName is shown in the page title, the header and as the name of the
@@ -49,7 +50,7 @@ var known = map[string]bool{
 	"ALLMEND_ADDR": true, "ALLMEND_DATA_DIR": true, "ALLMEND_BASE_URL": true,
 	"ALLMEND_ADMIN_EMAIL": true, "ALLMEND_ADMIN_PASSWORD_HASH": true,
 	"ALLMEND_SECURE_COOKIE": true, "ALLMEND_GOOGLE_CLIENT_ID": true,
-	"ALLMEND_GOOGLE_CLIENT_SECRET": true, "ALLMEND_ALPHAVANTAGE_KEY": true,
+	"ALLMEND_GOOGLE_CLIENT_SECRET": true, "ALLMEND_ALPHAVANTAGE_KEY": true, "ALLMEND_EODHD_KEY": true,
 	"ALLMEND_BASE_CURRENCY": true, "ALLMEND_FRANKFURTER_URL": true,
 	"ALLMEND_APP_NAME": true,
 }
@@ -81,6 +82,7 @@ func Load(environ []string) (Config, error) {
 		GoogleClientID:     vars["ALLMEND_GOOGLE_CLIENT_ID"],
 		GoogleClientSecret: vars["ALLMEND_GOOGLE_CLIENT_SECRET"],
 		AlphaVantageKey:    vars["ALLMEND_ALPHAVANTAGE_KEY"],
+		EODHDKey:           vars["ALLMEND_EODHD_KEY"],
 		FrankfurterURL:     vars["ALLMEND_FRANKFURTER_URL"],
 		SecureCookie:       true,
 		BaseCurrency:       or(vars["ALLMEND_BASE_CURRENCY"], "EUR"),

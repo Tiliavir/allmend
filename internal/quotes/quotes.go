@@ -1,5 +1,6 @@
 // Package quotes fetches market data over HTTP: daily prices and fund
-// profiles from Alpha Vantage, exchange rates from Frankfurter. Responses are
+// profiles from Alpha Vantage, daily prices of SIX titles from EODHD,
+// exchange rates from Frankfurter. Responses are
 // parsed strictly; anything unexpected is an error and nothing is stored.
 package quotes
 
@@ -108,26 +109,42 @@ func (a *AlphaVantage) Daily(ctx context.Context, symbol string) ([]finanzen.Pri
 
 // ParseDaily validates and sorts a daily series (date → fields with "4. close").
 func ParseDaily(series map[string]map[string]string) ([]finanzen.Price, error) {
-	if len(series) == 0 {
-		return nil, errors.New("empty time series")
-	}
 	out := make([]finanzen.Price, 0, len(series))
 	for d, f := range series {
-		if !finanzen.ValidDate(d) {
-			return nil, fmt.Errorf("invalid date %q", d)
-		}
 		s, ok := f["4. close"]
 		if !ok {
 			return nil, fmt.Errorf("%s: no close", d)
 		}
 		c, err := strconv.ParseFloat(s, 64)
-		if err != nil || !(c > 0) || c > 1e9 {
+		if err != nil {
 			return nil, fmt.Errorf("%s: invalid close %q", d, s)
 		}
 		out = append(out, finanzen.Price{Date: d, Close: c})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Date < out[j].Date })
-	return out, nil
+	return checkPrices(out)
+}
+
+// checkPrices rejects an empty series, invalid dates, duplicate days and
+// closes outside (0, 1e9], and sorts by date.
+func checkPrices(ps []finanzen.Price) ([]finanzen.Price, error) {
+	if len(ps) == 0 {
+		return nil, errors.New("empty time series")
+	}
+	seen := map[string]bool{}
+	for _, p := range ps {
+		if !finanzen.ValidDate(p.Date) {
+			return nil, fmt.Errorf("invalid date %q", p.Date)
+		}
+		if seen[p.Date] {
+			return nil, fmt.Errorf("%s: twice in the series", p.Date)
+		}
+		seen[p.Date] = true
+		if !(p.Close > 0) || p.Close > 1e9 {
+			return nil, fmt.Errorf("%s: invalid close %v", p.Date, p.Close)
+		}
+	}
+	sort.Slice(ps, func(i, j int) bool { return ps[i].Date < ps[j].Date })
+	return ps, nil
 }
 
 // number accepts a JSON number or a numeric string, as Alpha Vantage mixes both.

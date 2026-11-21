@@ -6,6 +6,15 @@ versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 
 ## [Unreleased]
 
+### Added
+
+- Finanzen: prices for SIX titles (symbols ending in `.SW`, e.g. `RO.SW`)
+  from EODHD ([ADR](docs/arc42/adr/ADR-20261121-six-prices-eodhd.md)).
+  Alpha Vantage does not serve them. Set `ALLMEND_EODHD_KEY` (free plan,
+  20 calls a day, counted apart from Alpha Vantage's 25); without it the
+  run reports the missing key. A title without prices loads one year of
+  history once.
+
 ### Fixed
 
 - Finanzen: the daily refresh no longer asks for the composition of stocks.

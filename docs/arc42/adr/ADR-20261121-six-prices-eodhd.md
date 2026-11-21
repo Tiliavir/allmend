@@ -1,6 +1,6 @@
 # ADR-20261121: SIX prices from EODHD
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 Alpha Vantage does not serve SIX Swiss Exchange titles: `TIME_SERIES_DAILY`
