@@ -4,6 +4,16 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [Unreleased]
+
+### Fixed
+
+- Finanzen: the daily refresh no longer asks for the composition of stocks.
+  Alpha Vantage serves their overview only on a paid plan, so every stock
+  ended in an error and used up a request of the daily budget. A stock's
+  sector, country and currency come from the security form; ETFs and funds
+  still get theirs from the provider.
+
 ## [0.14.0] - 2026-11-21
 
 ### Added

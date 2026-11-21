@@ -7,8 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/tiliavir/allmend/internal/finanzen"
 )
 
 func TestParseDailyStrict(t *testing.T) {
@@ -64,15 +62,8 @@ func TestParseETFProfile(t *testing.T) {
 	}
 }
 
-func TestOverviewAndFrankfurter(t *testing.T) {
+func TestFrankfurter(t *testing.T) {
 	t.Parallel()
-	ws, err := ParseOverview(raw(t, `{"Symbol":"IBM","Sector":"TECHNOLOGY","Country":"USA","Currency":"USD"}`))
-	if err != nil || len(ws) != 3 || ws[1].Dimension != finanzen.Country {
-		t.Fatal(ws, err)
-	}
-	if _, err := ParseOverview(raw(t, `{"Symbol":"X","Sector":"None"}`)); err == nil {
-		t.Error("empty overview accepted")
-	}
 	r, err := ParseFrankfurter([]byte(`{"amount":1,"base":"USD","date":"2025-01-02","rates":{"EUR":0.95}}`), "USD", "EUR")
 	if err != nil || r.Rate != 0.95 || r.Date != "2025-01-02" {
 		t.Fatal(r, err)

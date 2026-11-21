@@ -143,15 +143,11 @@ func (n *number) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// Profile returns the composition: ETF_PROFILE for ETFs and funds (sectors,
-// holdings), OVERVIEW for stocks (sector, country, currency).
+// Profile returns the composition of an ETF or fund from ETF_PROFILE
+// (sectors, holdings). Stocks have none to fetch.
 func (a *AlphaVantage) Profile(ctx context.Context, symbol, kind string) ([]finanzen.Weight, error) {
 	if kind == finanzen.Stock {
-		m, err := a.query(ctx, "OVERVIEW", symbol, nil)
-		if err != nil {
-			return nil, err
-		}
-		return ParseOverview(m)
+		return nil, errors.New("no composition is fetched for stocks")
 	}
 	m, err := a.query(ctx, "ETF_PROFILE", symbol, nil)
 	if err != nil {
@@ -209,38 +205,6 @@ func ParseETFProfile(m map[string]json.RawMessage) ([]finanzen.Weight, error) {
 			break
 		}
 		ws = append(ws, finanzen.Weight{Dimension: finanzen.Holdings, Label: n, Weight: byName[n]})
-	}
-	return ws, check(ws)
-}
-
-// ParseOverview reads Sector, Country and Currency of an OVERVIEW response.
-func ParseOverview(m map[string]json.RawMessage) ([]finanzen.Weight, error) {
-	field := func(k string) (string, error) {
-		raw, ok := m[k]
-		if !ok {
-			return "", nil
-		}
-		var s string
-		if err := json.Unmarshal(raw, &s); err != nil {
-			return "", fmt.Errorf("%s: %w", k, err)
-		}
-		if s == "None" || s == "-" {
-			return "", nil
-		}
-		return s, nil
-	}
-	var ws []finanzen.Weight
-	for _, f := range []struct{ key, dim string }{{"Sector", finanzen.Sector}, {"Country", finanzen.Country}, {"Currency", finanzen.Currency}} {
-		v, err := field(f.key)
-		if err != nil {
-			return nil, err
-		}
-		if v != "" {
-			ws = append(ws, finanzen.Weight{Dimension: f.dim, Label: title(v), Weight: 1})
-		}
-	}
-	if len(ws) == 0 {
-		return nil, errors.New("overview has no sector, country or currency")
 	}
 	return ws, check(ws)
 }
