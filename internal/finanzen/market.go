@@ -16,6 +16,19 @@ type Quotes interface {
 	Profile(ctx context.Context, symbol, kind string) ([]Weight, error)
 }
 
+// DailySource provides daily closes from a start date on (EODHD, for SIX
+// titles; ADR six-prices-eodhd).
+type DailySource interface {
+	DailySince(ctx context.Context, symbol, from string) ([]Price, error) // ascending
+}
+
+// SIXSuffix marks symbols of the SIX Swiss Exchange. Their prices come from
+// the SIX source, not from Quotes.
+const SIXSuffix = ".SW"
+
+// IsSIX reports whether symbol is a SIX title.
+func IsSIX(symbol string) bool { return strings.HasSuffix(symbol, SIXSuffix) }
+
 // Rates provides exchange rates (Frankfurter).
 type Rates interface {
 	Latest(ctx context.Context, currency, base string) (Rate, error)
@@ -25,12 +38,14 @@ type Rates interface {
 // and on demand by an admin.
 type Refresher struct {
 	Market     Market
-	Quotes     Quotes // nil: no API key, prices are not fetched
+	Quotes     Quotes      // nil: no API key, prices are not fetched
+	SIX        DailySource // nil: no EODHD key, SIX prices are not fetched
 	Rates      Rates
 	Base       string
 	Now        func() time.Time
-	Pause      time.Duration // between provider calls (rate limit)
-	Budget     int           // provider calls per run (free tier: 25 a day)
+	Pause      time.Duration // between calls to one provider (rate limit)
+	Budget     int           // Quotes calls per run (free tier: 25 a day)
+	SIXBudget  int           // SIX calls per run (free tier: 20 a day)
 	ProfileAge time.Duration // refresh profiles older than this
 
 	mu sync.Mutex // one run at a time
@@ -48,6 +63,35 @@ func (r *Refresher) Start(ctx context.Context) bool {
 	return true
 }
 
+// limiter counts the calls to one provider and pauses between them.
+type limiter struct {
+	calls, budget int
+	pause         time.Duration
+}
+
+// take reports whether one more call may be made, after the pause.
+func (l *limiter) take(ctx context.Context) bool {
+	if l.calls >= l.budget {
+		return false
+	}
+	if l.calls > 0 && l.pause > 0 {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(l.pause):
+		}
+	}
+	l.calls++
+	return true
+}
+
+func orDefault(n, d int) int {
+	if n <= 0 {
+		return d
+	}
+	return n
+}
+
 func (r *Refresher) now() time.Time {
 	if r.Now != nil {
 		return r.Now().UTC()
@@ -60,18 +104,8 @@ func (r *Refresher) now() time.Time {
 func (r *Refresher) Run(ctx context.Context) Run {
 	var errs, notes []string
 	newPrices := 0
-	calls := 0
-	pause := func() bool {
-		if calls > 0 && r.Pause > 0 {
-			select {
-			case <-ctx.Done():
-				return false
-			case <-time.After(r.Pause):
-			}
-		}
-		calls++
-		return true
-	}
+	av := &limiter{budget: orDefault(r.Budget, 25), pause: r.Pause}
+	six := &limiter{budget: orDefault(r.SIXBudget, 20), pause: r.Pause}
 	curs, err := r.Market.Currencies(ctx, r.Base)
 	if err != nil {
 		errs = append(errs, "Währungen: "+err.Error())
@@ -92,36 +126,68 @@ func (r *Refresher) Run(ctx context.Context) Run {
 	if err != nil {
 		errs = append(errs, "Wertpapiere: "+err.Error())
 	}
-	if r.Quotes == nil && len(syms) > 0 {
-		errs = append(errs, "Kein Alpha-Vantage-Schlüssel (ALLMEND_ALPHAVANTAGE_KEY), Kurse werden nicht geladen")
-		syms = nil
-	}
-	budget := r.Budget
-	if budget <= 0 {
-		budget = 25
-	}
-	if len(syms) > budget {
-		errs = append(errs, fmt.Sprintf("%d Kurssymbole, aber nur %d Abfragen pro Tag möglich", len(syms), budget))
-	}
+	var avSyms, sixSyms []SymbolUse
 	for _, s := range syms {
-		if calls >= budget || !pause() {
-			break
+		if IsSIX(s.Symbol) {
+			sixSyms = append(sixSyms, s)
+		} else {
+			avSyms = append(avSyms, s)
 		}
-		ps, err := r.Quotes.Daily(ctx, s.Symbol)
+	}
+	if r.Quotes == nil && len(avSyms) > 0 {
+		errs = append(errs, "Kein Alpha-Vantage-Schlüssel (ALLMEND_ALPHAVANTAGE_KEY), Kurse werden nicht geladen")
+		avSyms = nil
+	}
+	if r.SIX == nil && len(sixSyms) > 0 {
+		errs = append(errs, fmt.Sprintf("Kein EODHD-Schlüssel (ALLMEND_EODHD_KEY), Kurse der %d SIX-Titel (%s) werden nicht geladen", len(sixSyms), SIXSuffix))
+		sixSyms = nil
+	}
+	if len(avSyms) > av.budget {
+		errs = append(errs, fmt.Sprintf("%d Kurssymbole, aber nur %d Abfragen pro Tag möglich", len(avSyms), av.budget))
+	}
+	if len(sixSyms) > six.budget {
+		errs = append(errs, fmt.Sprintf("%d SIX-Kurssymbole, aber nur %d EODHD-Abfragen pro Tag möglich", len(sixSyms), six.budget))
+	}
+	store := func(symbol string, ps []Price, err error) {
 		if err == nil {
 			var n int
-			n, err = r.Market.AddPrices(ctx, s.Symbol, ps, r.now())
+			n, err = r.Market.AddPrices(ctx, symbol, ps, r.now())
 			newPrices += n
 		}
 		if err != nil {
-			errs = append(errs, s.Symbol+": "+err.Error())
+			errs = append(errs, symbol+": "+err.Error())
 		}
 	}
+	for _, s := range avSyms {
+		if !av.take(ctx) {
+			break
+		}
+		ps, err := r.Quotes.Daily(ctx, s.Symbol)
+		store(s.Symbol, ps, err)
+	}
+	// SIX: from the last stored close on; a new symbol gets the year of
+	// history the free plan offers.
+	for _, s := range sixSyms {
+		have, err := r.Market.Prices(ctx, s.Symbol)
+		if err != nil {
+			errs = append(errs, s.Symbol+": "+err.Error())
+			continue
+		}
+		from := r.now().AddDate(-1, 0, 0).Format(time.DateOnly)
+		if len(have) > 0 {
+			from = have[len(have)-1].Date
+		}
+		if !six.take(ctx) {
+			break
+		}
+		ps, err := r.SIX.DailySince(ctx, s.Symbol, from)
+		store(s.Symbol, ps, err)
+	}
 	// Profiles change slowly: refresh the oldest with what is left of the budget.
-	// Stocks are skipped: a stock is its own composition, and the provider
-	// offers their overview only on a paid plan.
-	for _, s := range syms {
-		if calls >= budget {
+	// Only ETFs and funds from Alpha Vantage: a stock is its own composition
+	// and its overview is a paid endpoint; EODHD gives no composition.
+	for _, s := range avSyms {
+		if av.calls >= av.budget {
 			break
 		}
 		if s.Kind == Stock {
@@ -135,7 +201,7 @@ func (r *Refresher) Run(ctx context.Context) Run {
 			errs = append(errs, s.Symbol+": "+err.Error())
 			continue
 		}
-		if !pause() {
+		if !av.take(ctx) {
 			break
 		}
 		ws, err := r.Quotes.Profile(ctx, s.Symbol, s.Kind)
@@ -161,7 +227,7 @@ func (r *Refresher) Run(ctx context.Context) Run {
 		slog.Error("finanzen: store run", "err", err)
 	}
 	if run.OK {
-		slog.Info("finanzen: market data refreshed", "prices", newPrices, "calls", calls)
+		slog.Info("finanzen: market data refreshed", "prices", newPrices, "calls", av.calls, "six_calls", six.calls)
 	} else {
 		slog.Warn("finanzen: market data refresh had errors", "detail", msg)
 	}

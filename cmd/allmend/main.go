@@ -156,9 +156,12 @@ func serve() error {
 	}
 	fin := st.Finanzen()
 	refresher := &finanzen.Refresher{Market: fin, Rates: &quotes.Frankfurter{BaseURL: cfg.FrankfurterURL}, Base: cfg.BaseCurrency,
-		Pause: 2 * time.Second, Budget: 25, ProfileAge: 30 * 24 * time.Hour}
+		Pause: 2 * time.Second, Budget: 25, SIXBudget: 20, ProfileAge: 30 * 24 * time.Hour}
 	if cfg.AlphaVantageKey != "" {
 		refresher.Quotes = &quotes.AlphaVantage{Key: cfg.AlphaVantageKey}
+	}
+	if cfg.EODHDKey != "" {
+		refresher.SIX = &quotes.EODHD{Key: cfg.EODHDKey}
 	}
 	srv.FinRefresh = func() bool { return refresher.Start(ctx) }
 	srv.AppName = cfg.AppName
