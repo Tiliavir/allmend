@@ -84,8 +84,9 @@ type Repository interface {
 	SlugExists(ctx context.Context, slug string) (bool, error)
 	Insert(ctx context.Context, p Page) error
 	Update(ctx context.Context, p Page, want int) error
-	SetRights(ctx context.Context, p Page) error
-	Move(ctx context.Context, pageID, parentID, beforeID string) error
+	SetRights(ctx context.Context, ps ...Page) error // all in one transaction
+	// Move also stores the rights of the pages in rights, in the same transaction.
+	Move(ctx context.Context, pageID, parentID, beforeID string, rights []Page) error
 	Delete(ctx context.Context, pageID, by string, at time.Time) error // soft delete
 	Revisions(ctx context.Context, pageID string) ([]Revision, error)
 }
@@ -149,8 +150,9 @@ type Node struct {
 	Children []Node
 }
 
-// Tree arranges the pages a may read by parent and position. A page whose
-// parent a may not read is shown at the top level.
+// Tree arranges the pages a may read by parent and position. Whoever may read
+// a page may read its parent; should that ever not hold, the page is shown at
+// the top level so a hidden title never leaks.
 func (s *Service) Tree(ctx context.Context, a account.Account) ([]Node, error) {
 	ps, err := s.Readable(ctx, a)
 	if err != nil {
@@ -227,7 +229,11 @@ func byPosition(x, y Page) int {
 	return strings.Compare(x.Title, y.Title)
 }
 
-// readableByID returns the page with id if a may read it.
+// ByID returns the page with id if a may read it, else ErrPlace.
+func (s *Service) ByID(ctx context.Context, a account.Account, id string) (Page, error) {
+	return s.readableByID(ctx, a, id)
+}
+
 func (s *Service) readableByID(ctx context.Context, a account.Account, id string) (Page, error) {
 	ps, err := s.Readable(ctx, a)
 	if err != nil {
@@ -240,18 +246,23 @@ func (s *Service) readableByID(ctx context.Context, a account.Account, id string
 	return ps[i], nil
 }
 
-// Create adds a page owned by a, readable and editable by everyone with
-// access, as the last child of parentID ("" for the top level), which a must
-// be able to read.
-func (s *Service) Create(ctx context.Context, a account.Account, parentID, title, body string) (Page, error) {
+// Create adds a page owned by a with rights r, as the last child of parentID
+// ("" for the top level), which a must be able to read.
+func (s *Service) Create(ctx context.Context, a account.Account, parentID, title, body string, r Rights) (Page, error) {
 	title, body, err := validate(title, body)
 	if err != nil {
 		return Page{Title: title, Body: body}, err
 	}
+	limit := Audience{All: true}
 	if parentID != "" {
-		if _, err := s.readableByID(ctx, a, parentID); err != nil {
+		parent, err := s.readableByID(ctx, a, parentID)
+		if err != nil {
 			return Page{Title: title, Body: body}, err
 		}
+		limit = parent.Audience()
+	}
+	if !(Page{OwnerID: a.ID, ReadAll: r.ReadAll, WriteAll: r.WriteAll, Readers: r.Readers, Writers: r.Writers}).Audience().within(limit) {
+		return Page{Title: title, Body: body}, ErrWider
 	}
 	slug, err := s.uniqueSlug(ctx, title)
 	if err != nil {
@@ -259,7 +270,8 @@ func (s *Service) Create(ctx context.Context, a account.Account, parentID, title
 	}
 	now := s.now()
 	p := Page{ID: id.New(), Slug: slug, ParentID: parentID, Title: title, Body: body, Version: 1, OwnerID: a.ID,
-		ReadAll: true, WriteAll: true, CreatedAt: now, UpdatedAt: now, UpdatedBy: a.ID}
+		CreatedAt: now, UpdatedAt: now, UpdatedBy: a.ID}
+	p.apply(r)
 	return p, s.Repo.Insert(ctx, p)
 }
 
@@ -292,15 +304,12 @@ type Rights struct {
 	Readers, Writers  []string
 }
 
-// SetRights changes who may read and edit; owner and admins only.
-func (s *Service) SetRights(ctx context.Context, a account.Account, slug string, r Rights) (Page, error) {
-	p, err := s.Get(ctx, a, slug)
-	if err != nil {
-		return p, err
-	}
-	if !p.CanManage(a) {
-		return p, ErrForbidden
-	}
+// Public lets everyone with access read and edit; the default for new pages.
+var Public = Rights{ReadAll: true, WriteAll: true}
+
+// apply sets p's rights from r: whoever may edit may also read, and the
+// account lists are kept only where they matter.
+func (p *Page) apply(r Rights) {
 	p.ReadAll, p.WriteAll = r.ReadAll || r.WriteAll, r.WriteAll
 	p.Readers, p.Writers = nil, nil
 	if !p.ReadAll {
@@ -309,39 +318,117 @@ func (s *Service) SetRights(ctx context.Context, a account.Account, slug string,
 	if !p.WriteAll {
 		p.Writers = uniq(r.Writers)
 	}
-	return p, s.Repo.SetRights(ctx, p)
+}
+
+// SetRights replaces who may read and edit the page; only its owner or an
+// admin may. The page may not be readable by more than its parent. Subpages
+// readable by more are narrowed to it in the same transaction and returned;
+// if that would lock an owner out of their own page, nothing changes.
+func (s *Service) SetRights(ctx context.Context, a account.Account, slug string, r Rights) (Page, []Page, error) {
+	p, err := s.Get(ctx, a, slug)
+	if err != nil {
+		return p, nil, err
+	}
+	if !p.CanManage(a) {
+		return p, nil, ErrForbidden
+	}
+	all, err := s.Repo.List(ctx)
+	if err != nil {
+		return p, nil, err
+	}
+	p.apply(r)
+	if p.ParentID != "" {
+		i := slices.IndexFunc(all, func(x Page) bool { return x.ID == p.ParentID })
+		if i < 0 {
+			return p, nil, ErrPlace
+		}
+		if !p.Audience().within(all[i].Audience()) {
+			return p, nil, ErrWider
+		}
+	}
+	changed, locked := cascade(all, p)
+	if len(locked) > 0 {
+		return p, nil, &LockedError{Pages: locked}
+	}
+	return p, changed, s.Repo.SetRights(ctx, append([]Page{p}, changed...)...)
+}
+
+// Parent returns p's parent regardless of who may read it, ErrNotFound for a
+// top-level page. Callers show its title only to those who may read it.
+func (s *Service) Parent(ctx context.Context, p Page) (Page, error) {
+	if p.ParentID == "" {
+		return Page{}, ErrNotFound
+	}
+	all, err := s.Repo.List(ctx)
+	if err != nil {
+		return Page{}, err
+	}
+	i := slices.IndexFunc(all, func(x Page) bool { return x.ID == p.ParentID })
+	if i < 0 {
+		return Page{}, ErrNotFound
+	}
+	return all[i], nil
 }
 
 // Move places the page below parentID ("" for the top level), right before
 // its child beforeID ("" for last). a must be able to edit the page and read
 // the new parent and beforeID. The page's content and version stay as they are.
-func (s *Service) Move(ctx context.Context, a account.Account, slug, parentID, beforeID string) (Page, error) {
+// Below a parent readable by fewer people, the page and its subpages are
+// narrowed to it in the same transaction and returned; that needs the right
+// to manage the page, and is refused if an owner would lose their page.
+func (s *Service) Move(ctx context.Context, a account.Account, slug, parentID, beforeID string) (Page, []Page, error) {
 	p, err := s.Get(ctx, a, slug)
 	if err != nil {
-		return p, err
+		return p, nil, err
 	}
 	if !p.CanWrite(a) {
-		return p, ErrForbidden
+		return p, nil, ErrForbidden
 	}
 	if parentID != "" {
 		if _, err := s.readableByID(ctx, a, parentID); err != nil {
-			return p, err
+			return p, nil, err
 		}
 	}
 	if beforeID != "" {
 		b, err := s.readableByID(ctx, a, beforeID)
 		if err != nil {
-			return p, err
+			return p, nil, err
 		}
 		if b.ParentID != parentID || b.ID == p.ID {
-			return p, ErrPlace
+			return p, nil, ErrPlace
 		}
 	}
-	if err := s.Repo.Move(ctx, p.ID, parentID, beforeID); err != nil {
-		return p, err
+	all, err := s.Repo.List(ctx)
+	if err != nil {
+		return p, nil, err
 	}
-	p.ParentID = parentID
-	return p, nil
+	limit := Audience{All: true}
+	if parentID != "" {
+		i := slices.IndexFunc(all, func(x Page) bool { return x.ID == parentID })
+		if i < 0 {
+			return p, nil, ErrPlace
+		}
+		limit = all[i].Audience()
+	}
+	if !limit.Has(p.OwnerID) {
+		return p, nil, &LockedError{Pages: []Page{p}}
+	}
+	q, narrowed := fit(p, limit)
+	changed, locked := cascade(all, q)
+	if len(locked) > 0 {
+		return p, nil, &LockedError{Pages: locked}
+	}
+	if narrowed {
+		changed = append([]Page{q}, changed...)
+	}
+	if len(changed) > 0 && !p.CanManage(a) {
+		return p, nil, ErrManage
+	}
+	if err := s.Repo.Move(ctx, p.ID, parentID, beforeID, changed); err != nil {
+		return p, nil, err
+	}
+	q.ParentID = parentID
+	return q, changed, nil
 }
 
 // Delete hides a page; its revisions stay in the database. Its children move

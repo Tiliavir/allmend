@@ -24,6 +24,7 @@ func All() []db.Migration {
 		{Version: 12, Name: "expense_categories", Up: v12},
 		{Version: 13, Name: "offline_requests", Up: db.SQL(v13)},
 		{Version: 14, Name: "orte", Up: v14},
+		{Version: 15, Name: "page_rights_inheritance", Up: v15},
 	}
 }
 

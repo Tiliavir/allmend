@@ -10,8 +10,11 @@ Extends [Pages (mini wiki)](ADR-20261109-pages.md).
   level, sorted by title.
 - A reader sees a page below its parent only if they may read the parent;
   otherwise it shows at the top level, so a hidden title never leaks through
-  the tree or the breadcrumbs.
-- Moving needs edit rights on the moved page only. It changes neither content
+  the tree or the breadcrumbs. Since
+  [ADR-20261121](ADR-20261121-page-rights-inheritance.md) this is only a
+  guard: a subpage is never readable by more than its parent.
+- Moving needs edit rights on the moved page only (since ADR-20261121: and
+  the right to manage it, if the move narrows its rights). It changes neither content
   nor version nor revisions. A move into the page itself or its subtree, or to
   a missing page or sibling, is refused (`ErrPlace`); a `CHECK` also forbids a
   page being its own parent.

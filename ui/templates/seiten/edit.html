@@ -8,6 +8,10 @@
 <label>Titel<input type="text" name="title" maxlength="120" required value="{{$d.Title}}"></label>
 <label>Text<textarea name="body" rows="22" spellcheck="true">{{$d.Body}}</textarea>
 <span class="hint">Markdown: <code># Titel</code>, <code>**fett**</code>, <code>- [ ] Aufgabe</code>, Tabellen, <code>```mermaid</code> für Diagramme, <code>```markmap</code> für Mindmaps aus Überschriften und Listen (Optionen und magische Kommentare wie bei Markmap).</span></label>
+{{if not $d.Page.ID}}<details class="rights"{{if $.Error}} open{{end}}>
+<summary>Rechte <span class="muted small">– {{if $d.Rights.Limited}}ohne Änderung dürfen alle, die „{{$d.Parent.Title}}“ lesen dürfen, lesen und bearbeiten{{else}}ohne Änderung dürfen alle mit Zugriff auf Seiten lesen und bearbeiten{{end}}</span></summary>
+<div class="stack">{{template "seitenrechte" $d.Rights}}</div>
+</details>{{end}}
 <div class="actions"><button class="button" type="submit">Speichern</button></div>
 </form>
 {{if $d.Current}}<details class="card" open>

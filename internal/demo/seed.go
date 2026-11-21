@@ -131,35 +131,25 @@ func (s *seeder) links(*family) error {
 // ── pages ─────────────────────────────────────────────
 
 func (s *seeder) pages(f *family) error {
-	shop, err := s.Pages.Create(s.ctx, f.anna, "", "Einkaufsliste", "# Wochenmarkt\n\n- [ ] Äpfel\n- [ ] Bergkäse\n- [x] Eier\n- [ ] Brot\n\n# Drogerie\n\n- [ ] Zahnpasta\n- [x] Sonnencreme\n")
+	shop, err := s.Pages.Create(s.ctx, f.anna, "", "Einkaufsliste", "# Wochenmarkt\n\n- [ ] Äpfel\n- [ ] Bergkäse\n- [x] Eier\n- [ ] Brot\n\n# Drogerie\n\n- [ ] Zahnpasta\n- [x] Sonnencreme\n", pages.Public)
 	if err != nil {
-		return err
-	}
-	if _, err := s.Pages.SetRights(s.ctx, f.anna, shop.Slug, pages.Rights{ReadAll: true, WriteAll: true}); err != nil {
 		return err
 	}
 	if _, err := s.Pages.Save(s.ctx, f.ben, shop.Slug, shop.Version, shop.Title, shop.Body+"\n# Velo\n\n- [ ] Kettenöl\n"); err != nil {
 		return err
 	}
-	home, err := s.Pages.Create(s.ctx, f.anna, "", "Haus und Technik", "Alles rund ums Haus. Die Unterseiten stehen unten.\n")
+	home, err := s.Pages.Create(s.ctx, f.anna, "", "Haus und Technik", "Alles rund ums Haus. Die Unterseiten stehen unten.\n", pages.Public)
 	if err != nil {
 		return err
 	}
-	net, err := s.Pages.Create(s.ctx, f.anna, home.ID, "Heimnetz", "Wie unser Netz aufgebaut ist.\n\n```mermaid\ngraph TD\n  I((Internet)) --> R[Router]\n  R --> W[WLAN]\n  R --> G[Gäste-WLAN]\n  R --> N[NAS]\n  N --> A[Allmend]\n  N --> K[Kalender]\n  W --> P[Laptops und Handys]\n  G --> T[Fernseher]\n```\n\n| Gerät | Netz |\n|---|---|\n| NAS | WLAN, fest |\n| Drucker | WLAN |\n| Fernseher | Gäste |\n")
-	if err != nil {
+	if _, err := s.Pages.Create(s.ctx, f.anna, home.ID, "Heimnetz", "Wie unser Netz aufgebaut ist.\n\n```mermaid\ngraph TD\n  I((Internet)) --> R[Router]\n  R --> W[WLAN]\n  R --> G[Gäste-WLAN]\n  R --> N[NAS]\n  N --> A[Allmend]\n  N --> K[Kalender]\n  W --> P[Laptops und Handys]\n  G --> T[Fernseher]\n```\n\n| Gerät | Netz |\n|---|---|\n| NAS | WLAN, fest |\n| Drucker | WLAN |\n| Fernseher | Gäste |\n", pages.Rights{ReadAll: true}); err != nil {
 		return err
 	}
-	if _, err := s.Pages.SetRights(s.ctx, f.anna, net.Slug, pages.Rights{ReadAll: true}); err != nil {
+	if _, err := s.Pages.Create(s.ctx, f.ben, home.ID, "Heizung", "Wartung jedes Jahr im September.\n\n- [ ] Termin vereinbaren\n- [ ] Filter kaufen\n", pages.Public); err != nil {
 		return err
 	}
-	if _, err := s.Pages.Create(s.ctx, f.ben, home.ID, "Heizung", "Wartung jedes Jahr im September.\n\n- [ ] Termin vereinbaren\n- [ ] Filter kaufen\n"); err != nil {
-		return err
-	}
-	trip, err := s.Pages.Create(s.ctx, f.anna, "", "Sommerferien", "Ideen für den Sommer:\n\n1. Velotour um den Bodensee\n2. Zelten am See\n3. **Ein** Regentag im Museum\n\n- [ ] Zelt prüfen\n- [ ] Fähre nachschauen\n")
-	if err != nil {
-		return err
-	}
-	_, err = s.Pages.SetRights(s.ctx, f.anna, trip.Slug, pages.Rights{Readers: []string{f.ben.ID, f.mia.ID}, Writers: []string{f.ben.ID}})
+	_, err = s.Pages.Create(s.ctx, f.anna, "", "Sommerferien", "Ideen für den Sommer:\n\n1. Velotour um den Bodensee\n2. Zelten am See\n3. **Ein** Regentag im Museum\n\n- [ ] Zelt prüfen\n- [ ] Fähre nachschauen\n",
+		pages.Rights{Readers: []string{f.ben.ID, f.mia.ID}, Writers: []string{f.ben.ID}})
 	return err
 }
 

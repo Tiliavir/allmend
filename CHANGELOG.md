@@ -4,6 +4,34 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 versions: [Semantic Versioning](https://semver.org/). Releasing is described in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.14.0] - 2026-11-21
+
+### Added
+
+- Seiten: who may read and edit a new page is chosen right in the form
+  (section *Rechte*, #41). On the top level, everyone with access to Seiten
+  may read and edit unless changed, as before; a private page is never
+  visible to others, not even for its first version.
+
+### Changed
+
+- Seiten: **a subpage is never readable by more people than its parent**
+  ([ADR](docs/arc42/adr/ADR-20261121-page-rights-inheritance.md)). A new
+  subpage starts as wide as its parent allows and offers only the parent's
+  readers. Narrowing a page narrows its subpages along; moving a page below
+  one with fewer readers narrows it too (only its owner or an admin may do
+  that). Both are refused if an owner would lose access to their own page.
+  Edit rights stay free within the readers.
+- `POST /seiten` requires the fields `read` and `write` (`all` or `some`),
+  like the rights form; a request without them is refused.
+
+### Migration
+
+- Step 15 narrows existing subpages that are readable by more than their
+  parent and logs their ids; it aborts with the page ids if an owner may not
+  read the parent of their page. **Run `allmend migrate --dry-run` against a
+  copy of the real data before releasing.**
+
 ## [0.13.0] - 2026-11-16
 
 ### Changed
