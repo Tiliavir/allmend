@@ -27,3 +27,4 @@
 | [Markmap mind maps on pages](adr/ADR-20261115-markmap.md) | Accepted |
 | [Front-end libraries built, not checked in](adr/ADR-20261116-vendor-build.md) | Accepted |
 | [Subpages never readable by more than their parent](adr/ADR-20261121-page-rights-inheritance.md) | Accepted |
+| [SIX prices from EODHD](adr/ADR-20261121-six-prices-eodhd.md) | Proposed |
